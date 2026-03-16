@@ -41,27 +41,21 @@ Patient → Upload Image
 
 ## Project Structure
 skinner-backend
-│
-├── ai/                     # AI service (FastAPI + TensorFlow model)
-│
+├── ai/                 # AI Service (FastAPI + TensorFlow)
 ├── src/
-│   ├── config/             # Database config & Swagger setup
-│   ├── controllers/        # API controllers (handle requests)
-│   ├── db/                 # Database connection and helpers
-│   ├── middlewares/        # Authentication & error middleware
-│   ├── routes/             # API routes definitions
-│   ├── services/           # Business logic layer
-│   ├── socket/             # WebSocket real-time chat
-│   ├── uploads/            # Uploaded images storage
-│   ├── utils/              # Utility/helper functions
-│   └── app.js              # Express application configuration
-│
-├── server.js               # Application entry point
-├── test-socket.js          # WebSocket testing script
-├── package.json            # Project dependencies
-├── package-lock.json
-├── .env.example            # Environment variables template
-└── README.md               # Project documentation
+│   ├── config/         # App configuration & Swagger
+│   ├── controllers/    # API Request Handlers
+│   ├── db/             # Database Connection (MongoDB/PostgreSQL)
+│   ├── middlewares/    # Auth & Error Handlers
+│   ├── routes/         # API Route Definitions
+│   ├── services/       # Business Logic Layer
+│   ├── socket/         # Real-time Chat Logic
+│   ├── uploads/        # Static Files (Images)
+│   ├── utils/          # Helper Functions
+│   └── app.js          # Express Config
+├── server.js           # Entry Point
+├── test-socket.js      # Testing script for WebSockets
+└── .env.example        # Environment Template
 
 ---
 
