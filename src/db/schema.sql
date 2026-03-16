@@ -10,7 +10,24 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE TABLE IF NOT EXISTS admin (
     admin_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL
+    password VARCHAR(255) NOT NULL,
+    admin_role VARCHAR(20) NOT NULL DEFAULT 'admin',
+    CONSTRAINT admin_role_check
+        CHECK (admin_role IN ('super_admin', 'admin'))
+);
+
+-- =========================================
+-- ADMIN INVITE CODE
+-- one-time invite code for creating new admins
+-- only super admin should generate these codes
+-- =========================================
+CREATE TABLE IF NOT EXISTS admin_invite_code (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    invite_code VARCHAR(50) UNIQUE NOT NULL,
+    created_by_admin_id UUID NOT NULL REFERENCES admin(admin_id) ON DELETE CASCADE,
+    used_by_admin_id UUID REFERENCES admin(admin_id) ON DELETE SET NULL,
+    is_used BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- =========================================
@@ -199,6 +216,15 @@ END $$;
 
 CREATE INDEX IF NOT EXISTS idx_admin_email
 ON admin(email);
+
+CREATE INDEX IF NOT EXISTS idx_admin_role
+ON admin(admin_role);
+
+CREATE INDEX IF NOT EXISTS idx_admin_invite_code
+ON admin_invite_code(invite_code);
+
+CREATE INDEX IF NOT EXISTS idx_admin_invite_is_used
+ON admin_invite_code(is_used);
 
 CREATE INDEX IF NOT EXISTS idx_doctor_email
 ON doctor(email);
