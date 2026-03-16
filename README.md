@@ -11,6 +11,7 @@ AI-powered skin disease detection platform backend.
 - FastAPI
 - WebSocket
 - JWT Authentication
+- Swagger API Documentation
 
 ---
 
@@ -37,18 +38,7 @@ Patient → Upload Image
 - Swagger API Documentation
 
 ---
-## 🚀 Tech Stack
 
-- Node.js
-- Express.js
-- PostgreSQL
-- TensorFlow
-- FastAPI
-- WebSocket (Socket.IO)
-- JWT Authentication
-- Swagger API Documentation
-
----
 ## Project Structure
 skinner-backend
 │
@@ -72,12 +62,14 @@ skinner-backend
 ├── package-lock.json
 ├── .env.example            # Environment variables template
 └── README.md               # Project documentation
+
 ---
 
 ## API Documentation
 
 Swagger UI available at:
 /api-docs
+
 ---
 
 ## Installation
@@ -90,6 +82,7 @@ npm install
 
 Run the server
 npm run dev
+
 ---
 
 ## Environment Variables
