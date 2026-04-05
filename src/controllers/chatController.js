@@ -1,55 +1,62 @@
 const chatService = require("../services/chatService");
 
-exports.checkPatientChatAccess = async (req, res) => {
+// الوظيفة اللي كانت ناقصة وسببت الـ Crash
+exports.checkChatAccess = async (req, res) => {
   try {
-    const { chatId, patientId } = req.params;
-    const result = await chatService.checkPatientChatAccess(chatId, patientId);
+    const { chatId } = req.params;
+    const { id: userId, role } = req.user;
+
+    const result = await chatService.checkAccess(chatId, userId, role);
     res.status(200).json(result);
-  } catch (error) {
-    console.log("CHECK PATIENT CHAT ACCESS ERROR:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
-exports.checkDoctorChatAccess = async (req, res) => {
-  try {
-    const { chatId, doctorId } = req.params;
-    const result = await chatService.checkDoctorChatAccess(chatId, doctorId);
-    res.status(200).json(result);
-  } catch (error) {
-    console.log("CHECK DOCTOR CHAT ACCESS ERROR:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
-
+// src/controllers/chatController.js
 exports.sendMessage = async (req, res) => {
   try {
-    const result = await chatService.sendMessage(req.body);
-    res.status(201).json(result);
-  } catch (error) {
-    console.log("SEND MESSAGE ERROR:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message
+    const { chat_id, message_text } = req.body;
+    let file_path = null;
+    let original_name = null;
+    let type = 'text';
+
+    // ... (كود الـ access سيبه زي ما هو)
+
+    if (req.file) {
+      type = req.file.mimetype === 'application/pdf' ? 'file' : 'image';
+      file_path = `/uploads/chat/${req.file.filename}`;
+      original_name = req.file.originalname;
+    }
+
+    const message = await chatService.saveMessage({
+      chat_id,
+      message_text: message_text || null, // النص بتاعك "check this file" هيفضل هنا
+      message_type: type,
+      original_filename: original_name,
+      file_url: file_path, // المسار هيروح هنا
+      sender_id: req.user.id,
+      sender_role: req.user.role
     });
+
+    res.status(201).json({ success: true, data: message });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 exports.getMessagesByChatId = async (req, res) => {
   try {
-    const result = await chatService.getMessagesByChatId(req.params.chatId);
-    res.status(200).json(result);
+    const { chatId } = req.params;
+    const access = await chatService.checkAccess(chatId, req.user.id, req.user.role);
+    
+    if (!access.allowed) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    const messages = await chatService.getMessagesByChatId(chatId);
+    res.status(200).json({ success: true, data: messages });
   } catch (error) {
-    console.log("GET MESSAGES ERROR:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };

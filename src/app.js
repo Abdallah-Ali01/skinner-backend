@@ -15,6 +15,7 @@ const swaggerSpec = require("./config/swagger");
 const { errorHandler } = require("./middlewares/errorMiddleware");
 const path = require("path");
 const app = express();
+const uploadRoutes = require("./routes/uploadRoutes");
 
 app.use(cors({
   origin: process.env.FRONTEND_URL,
@@ -55,5 +56,6 @@ app.use("/api/chat", chatRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use(errorHandler);
-
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/api/upload", uploadRoutes);
 module.exports = app;
