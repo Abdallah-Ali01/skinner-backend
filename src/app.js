@@ -10,12 +10,12 @@ const appointmentRoutes = require("./routes/appointmentRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const uploadRoutes = require("./routes/uploadRoutes");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
 const { errorHandler } = require("./middlewares/errorMiddleware");
 const path = require("path");
 const app = express();
-const uploadRoutes = require("./routes/uploadRoutes");
 
 app.use(cors({
   origin: process.env.FRONTEND_URL,
@@ -47,6 +47,7 @@ app.get("/db-test", async (req, res) => {
   }
 });
 
+// API Routes — all registered BEFORE the error handler
 app.use("/api/auth", authRoutes);
 app.use("/api/analysis", analysisRoutes);
 app.use("/api/doctor", doctorRoutes);
@@ -54,8 +55,10 @@ app.use("/api/appointment", appointmentRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-app.use(errorHandler);
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/upload", uploadRoutes);
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Error handler — must be LAST middleware
+app.use(errorHandler);
+
 module.exports = app;

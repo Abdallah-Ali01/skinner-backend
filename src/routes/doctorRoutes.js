@@ -18,20 +18,22 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
  *     ReviewCaseRequest:
  *       type: object
  *       required:
- *         - chat_id
- *         - doctor_name
+ *         - appointment_id
  *         - diagnosis
  *         - medical_syndicate_id_card
  *       properties:
- *         chat_id:
+ *         appointment_id:
  *           type: string
  *           example: 92aaaa87-7c07-452f-91a7-7d22390097e6
- *         doctor_name:
- *           type: string
- *           example: Dr. Ahmed Ali
  *         diagnosis:
  *           type: string
  *           example: Likely HFMD. Patient should follow up clinically.
+ *         prescription:
+ *           type: string
+ *           example: Apply topical cream twice daily for 2 weeks
+ *         notes:
+ *           type: string
+ *           example: Follow up in 2 weeks if no improvement
  *         medical_syndicate_id_card:
  *           type: string
  *           example: DOC-2001
@@ -41,20 +43,13 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
  * @swagger
  * /api/doctor/pending-cases:
  *   get:
- *     summary: Get pending paid cases for a doctor
+ *     summary: Get pending paid cases for the logged-in doctor
  *     tags: [Doctor]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: doctor_id
- *         required: true
- *         schema:
- *           type: string
- *         example: DOC-2001
  *     responses:
  *       200:
- *         description: Pending cases
+ *         description: Pending cases (includes analysis data + chat_id)
  */
 router.get("/pending-cases", verifyToken, allowRoles("doctor"), doctorController.getPendingCases);
 
@@ -62,49 +57,38 @@ router.get("/pending-cases", verifyToken, allowRoles("doctor"), doctorController
  * @swagger
  * /api/doctor/reviewed-cases:
  *   get:
- *     summary: Get reviewed cases for a doctor
+ *     summary: Get reviewed cases for the logged-in doctor
  *     tags: [Doctor]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: doctor_id
- *         required: true
- *         schema:
- *           type: string
- *         example: DOC-2001
  *     responses:
  *       200:
- *         description: Reviewed cases
+ *         description: Reviewed cases with reports
  */
 router.get("/reviewed-cases", verifyToken, allowRoles("doctor"), doctorController.getReviewedCases);
 
 /**
  * @swagger
- * /api/doctor/case/{chatId}:
+ * /api/doctor/case/{appointmentId}:
  *   get:
- *     summary: Get case details by chat ID
+ *     summary: Get case details by appointment ID
  *     tags: [Doctor]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: chatId
+ *         name: appointmentId
  *         required: true
  *         schema:
  *           type: string
  *         example: 92aaaa87-7c07-452f-91a7-7d22390097e6
- *       - in: query
- *         name: doctor_id
- *         required: true
- *         schema:
- *           type: string
- *         example: DOC-2001
  *     responses:
  *       200:
- *         description: Case details
+ *         description: Case details (analysis + patient + chat_id)
+ *       404:
+ *         description: Case not found
  */
-router.get("/case/:chatId", verifyToken, allowRoles("doctor"), doctorController.getCaseDetails);
+router.get("/case/:appointmentId", verifyToken, allowRoles("doctor"), doctorController.getCaseDetails);
 
 /**
  * @swagger

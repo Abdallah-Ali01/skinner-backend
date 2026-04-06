@@ -1,5 +1,4 @@
 const nodemailer = require("nodemailer");
-require("dotenv").config();
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
@@ -17,7 +16,7 @@ exports.verifyEmailConnection = async () => {
 
 exports.sendResetPasswordOtpEmail = async ({ to, otpCode }) => {
   const info = await transporter.sendMail({
-    from: process.env.EMAIL_FROM,
+    from: process.env.EMAIL_FROM || process.env.SMTP_USER,
     to,
     subject: "SKINNER Password Reset Code",
     html: `

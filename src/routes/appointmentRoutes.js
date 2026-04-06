@@ -23,7 +23,7 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
  *         - doctor_name
  *         - total_cost
  *         - date
- *         - chat_id
+ *         - analysis_id
  *       properties:
  *         patient_id:
  *           type: string
@@ -40,7 +40,7 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
  *         date:
  *           type: string
  *           example: 2026-03-15T10:30:00.000Z
- *         chat_id:
+ *         analysis_id:
  *           type: string
  *           example: 92aaaa87-7c07-452f-91a7-7d22390097e6
  */
@@ -61,7 +61,7 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
  *             $ref: '#/components/schemas/BookAppointmentRequest'
  *     responses:
  *       201:
- *         description: Appointment booked successfully
+ *         description: Appointment booked successfully (status = pending_payment)
  *       500:
  *         description: Server error
  */
@@ -81,12 +81,16 @@ router.post("/book", verifyToken, allowRoles("patient"), appointmentController.b
  *         required: true
  *         schema:
  *           type: string
- *         example: fd3d3430-d8f0-49a6-958d-9739dd379dd1
  *     responses:
  *       200:
- *         description: Patient appointments
+ *         description: Patient appointments (includes chat_id if payment was made)
  */
-router.get("/patient/:patientId", verifyToken, allowRoles("patient", "admin"), appointmentController.getPatientAppointments);
+router.get("/patient/:patientId", verifyToken, allowRoles("patient", "admin"), (req, res, next) => {
+  if (req.user.role === "patient" && req.user.id !== req.params.patientId) {
+    return res.status(403).json({ success: false, message: "Access denied" });
+  }
+  next();
+}, appointmentController.getPatientAppointments);
 
 /**
  * @swagger
@@ -107,6 +111,11 @@ router.get("/patient/:patientId", verifyToken, allowRoles("patient", "admin"), a
  *       200:
  *         description: Doctor appointments
  */
-router.get("/doctor/:doctorId", verifyToken, allowRoles("doctor", "admin"), appointmentController.getDoctorAppointments);
+router.get("/doctor/:doctorId", verifyToken, allowRoles("doctor", "admin"), (req, res, next) => {
+  if (req.user.role === "doctor" && req.user.id !== req.params.doctorId) {
+    return res.status(403).json({ success: false, message: "Access denied" });
+  }
+  next();
+}, appointmentController.getDoctorAppointments);
 
 module.exports = router;

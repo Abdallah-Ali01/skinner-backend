@@ -5,7 +5,7 @@ exports.getPendingCases = async (doctorId) => {
   const result = await pool.query(`
     SELECT
       a.appointment_id,
-      a.chat_id,
+      a.analysis_id,
       a.patient_id,
       a.date AS appointment_date,
       a.status AS appointment_status,
@@ -14,25 +14,23 @@ exports.getPendingCases = async (doctorId) => {
       p.gender,
       p.email,
       p.phone,
-      c.skin_image_upload,
-      c.skin_disease_classification,
-      c.analysis,
-      c.treatment_suggestion,
-      c.doctor_recommendation,
-      c.created_at,
+      an.skin_image_upload,
+      an.skin_disease_classification,
+      an.analysis,
+      an.treatment_suggestion,
+      an.doctor_recommendation,
+      an.created_at AS analysis_date,
+      c.chat_id,
       pay.payment_status
     FROM appointment a
-    JOIN patient p
-      ON a.patient_id = p.patient_id
-    JOIN chat_analysis c
-      ON a.chat_id = c.chat_id
-    JOIN payment pay
-      ON a.appointment_id = pay.appointment_id
-    LEFT JOIN report r
-      ON a.chat_id = r.chat_id
+    JOIN patient p ON a.patient_id = p.patient_id
+    JOIN analysis an ON a.analysis_id = an.analysis_id
+    JOIN payment pay ON a.appointment_id = pay.appointment_id
+    LEFT JOIN chat c ON a.appointment_id = c.appointment_id
+    LEFT JOIN report r ON a.appointment_id = r.appointment_id
     WHERE a.medical_syndicate_id_card = $1
       AND pay.payment_status = 'paid'
-      AND r.chat_id IS NULL
+      AND r.appointment_id IS NULL
     ORDER BY a.date DESC
   `, [doctorId]);
 
@@ -47,13 +45,17 @@ exports.getReviewedCases = async (doctorId) => {
   const result = await pool.query(`
     SELECT
       r.report_id,
-      r.chat_id,
+      r.appointment_id,
       r.patient_id,
       r.patient_name,
       r.doctor_name,
       r.diagnosis,
-      r.date
+      r.date,
+      a.analysis_id,
+      c.chat_id
     FROM report r
+    JOIN appointment a ON r.appointment_id = a.appointment_id
+    LEFT JOIN chat c ON a.appointment_id = c.appointment_id
     WHERE r.medical_syndicate_id_card = $1
     ORDER BY r.date DESC
   `, [doctorId]);
@@ -65,11 +67,11 @@ exports.getReviewedCases = async (doctorId) => {
   };
 };
 
-exports.getCaseDetails = async (doctorId, chatId) => {
+exports.getCaseDetails = async (doctorId, appointmentId) => {
   const result = await pool.query(`
     SELECT
       a.appointment_id,
-      a.chat_id,
+      a.analysis_id,
       a.patient_id,
       a.date AS appointment_date,
       a.status AS appointment_status,
@@ -79,27 +81,28 @@ exports.getCaseDetails = async (doctorId, chatId) => {
       p.email,
       p.phone,
       p.patient_history,
-      c.skin_image_upload,
-      c.skin_disease_classification,
-      c.analysis,
-      c.treatment_suggestion,
-      c.doctor_recommendation,
-      c.created_at,
+      an.skin_image_upload,
+      an.skin_disease_classification,
+      an.analysis,
+      an.treatment_suggestion,
+      an.doctor_recommendation,
+      an.created_at AS analysis_date,
+      c.chat_id,
       pay.payment_status
     FROM appointment a
-    JOIN patient p
-      ON a.patient_id = p.patient_id
-    JOIN chat_analysis c
-      ON a.chat_id = c.chat_id
-    JOIN payment pay
-      ON a.appointment_id = pay.appointment_id
+    JOIN patient p ON a.patient_id = p.patient_id
+    JOIN analysis an ON a.analysis_id = an.analysis_id
+    JOIN payment pay ON a.appointment_id = pay.appointment_id
+    LEFT JOIN chat c ON a.appointment_id = c.appointment_id
     WHERE a.medical_syndicate_id_card = $1
-      AND a.chat_id = $2
+      AND a.appointment_id = $2
       AND pay.payment_status = 'paid'
-  `, [doctorId, chatId]);
+  `, [doctorId, appointmentId]);
 
   if (result.rows.length === 0) {
-    throw new Error("Case not found or not allowed");
+    const err = new Error("Case not found or not allowed");
+    err.status = 404;
+    throw err;
   }
 
   return {
@@ -110,43 +113,47 @@ exports.getCaseDetails = async (doctorId, chatId) => {
 
 exports.reviewCase = async (data) => {
   const {
-    chat_id,
-    doctor_name,
+    appointment_id,
     diagnosis,
+    prescription,
+    notes,
     medical_syndicate_id_card
   } = data;
 
-  if (!chat_id || !doctor_name || !diagnosis || !medical_syndicate_id_card) {
-    throw new Error("chat_id, doctor_name, diagnosis, and medical_syndicate_id_card are required");
+  if (!appointment_id || !diagnosis || !medical_syndicate_id_card) {
+    const err = new Error("appointment_id, diagnosis, and medical_syndicate_id_card are required");
+    err.status = 400;
+    throw err;
   }
 
+  // Verify this is a paid appointment assigned to this doctor
   const caseResult = await pool.query(`
     SELECT
       a.appointment_id,
-      a.chat_id,
-      a.patient_id,
-      p.name AS patient_name
+      a.analysis_id,
+      a.patient_id
     FROM appointment a
-    JOIN patient p
-      ON a.patient_id = p.patient_id
-    JOIN payment pay
-      ON a.appointment_id = pay.appointment_id
+    JOIN payment pay ON a.appointment_id = pay.appointment_id
     WHERE a.medical_syndicate_id_card = $1
-      AND a.chat_id = $2
+      AND a.appointment_id = $2
       AND pay.payment_status = 'paid'
-  `, [medical_syndicate_id_card, chat_id]);
+  `, [medical_syndicate_id_card, appointment_id]);
 
   if (caseResult.rows.length === 0) {
-    throw new Error("Case not found, not paid, or not assigned to this doctor");
+    const err = new Error("Case not found, not paid, or not assigned to this doctor");
+    err.status = 404;
+    throw err;
   }
 
   const existingReport = await pool.query(
-    `SELECT * FROM report WHERE chat_id = $1`,
-    [chat_id]
+    `SELECT 1 FROM report WHERE appointment_id = $1`,
+    [appointment_id]
   );
 
   if (existingReport.rows.length > 0) {
-    throw new Error("This case has already been reviewed");
+    const err = new Error("This case has already been reviewed");
+    err.status = 409;
+    throw err;
   }
 
   const reportId = uuidv4();
@@ -154,25 +161,30 @@ exports.reviewCase = async (data) => {
 
   await pool.query(`
     INSERT INTO report
-    (report_id, doctor_name, patient_name, patient_id, date, diagnosis, medical_syndicate_id_card, chat_id)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    (report_id, appointment_id, patient_id, medical_syndicate_id_card, diagnosis, prescription, notes)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
   `, [
     reportId,
-    doctor_name,
-    caseData.patient_name,
+    appointment_id,
     caseData.patient_id,
-    new Date(),
-    diagnosis,
     medical_syndicate_id_card,
-    chat_id
+    diagnosis,
+    prescription || null,
+    notes || null
   ]);
+
+  // Update appointment status to completed
+  await pool.query(
+    `UPDATE appointment SET status = 'completed' WHERE appointment_id = $1`,
+    [appointment_id]
+  );
 
   return {
     success: true,
     message: "Case reviewed successfully and report created",
     data: {
       report_id: reportId,
-      chat_id,
+      appointment_id,
       patient_id: caseData.patient_id
     }
   };

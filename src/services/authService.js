@@ -2,20 +2,28 @@ const pool = require("../config/database");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
-require("dotenv").config();
-const crypto = require("crypto");
 const emailService = require("./emailService");
+
+const TABLE_MAP = { patient: "patient", doctor: "doctor", admin: "admin" };
 
 exports.registerPatient = async (data) => {
   const { name, phone, gender, email, password, age, address } = data;
 
+  if (!name || !email || !password) {
+    const err = new Error("name, email, and password are required");
+    err.status = 400;
+    throw err;
+  }
+
   const existing = await pool.query(
-    `SELECT * FROM patient WHERE email = $1`,
+    `SELECT 1 FROM patient WHERE email = $1`,
     [email]
   );
 
   if (existing.rows.length > 0) {
-    throw new Error("Email already exists");
+    const err = new Error("Email already exists");
+    err.status = 409;
+    throw err;
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -63,20 +71,26 @@ exports.registerDoctor = async (data, file) => {
     !password ||
     !specialization
   ) {
-    throw new Error("medical_syndicate_id_card, name, email, password, and specialization are required");
+    const err = new Error("medical_syndicate_id_card, name, email, password, and specialization are required");
+    err.status = 400;
+    throw err;
   }
 
   if (!file) {
-    throw new Error("Syndicate card image is required");
+    const err = new Error("Syndicate card image is required");
+    err.status = 400;
+    throw err;
   }
 
   const existing = await pool.query(
-    `SELECT * FROM doctor WHERE email = $1 OR medical_syndicate_id_card = $2`,
+    `SELECT 1 FROM doctor WHERE email = $1 OR medical_syndicate_id_card = $2`,
     [email, medical_syndicate_id_card]
   );
 
   if (existing.rows.length > 0) {
-    throw new Error("Doctor already exists with this email or syndicate ID");
+    const err = new Error("Doctor already exists with this email or syndicate ID");
+    err.status = 409;
+    throw err;
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -137,16 +151,20 @@ exports.registerAdmin = async (data) => {
   const { email, password, invite_code } = data;
 
   if (!email || !password || !invite_code) {
-    throw new Error("email, password, and invite_code are required");
+    const err = new Error("email, password, and invite_code are required");
+    err.status = 400;
+    throw err;
   }
 
   const existing = await pool.query(
-    `SELECT * FROM admin WHERE email = $1`,
+    `SELECT 1 FROM admin WHERE email = $1`,
     [email]
   );
 
   if (existing.rows.length > 0) {
-    throw new Error("Admin already exists");
+    const err = new Error("Admin already exists");
+    err.status = 409;
+    throw err;
   }
 
   const inviteResult = await pool.query(
@@ -158,13 +176,17 @@ exports.registerAdmin = async (data) => {
   );
 
   if (inviteResult.rows.length === 0) {
-    throw new Error("Invalid invite code");
+    const err = new Error("Invalid invite code");
+    err.status = 400;
+    throw err;
   }
 
   const invite = inviteResult.rows[0];
 
   if (invite.is_used) {
-    throw new Error("Invite code already used");
+    const err = new Error("Invite code already used");
+    err.status = 400;
+    throw err;
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -203,6 +225,12 @@ exports.registerAdmin = async (data) => {
 exports.login = async (data) => {
   const { role, email, password } = data;
 
+  if (!role || !email || !password) {
+    const err = new Error("role, email, and password are required");
+    err.status = 400;
+    throw err;
+  }
+
   let query = "";
   let idField = "";
 
@@ -216,35 +244,45 @@ exports.login = async (data) => {
     query = `SELECT * FROM admin WHERE email = $1`;
     idField = "admin_id";
   } else {
-    throw new Error("Invalid role");
+    const err = new Error("Invalid role");
+    err.status = 400;
+    throw err;
   }
 
   const result = await pool.query(query, [email]);
 
   if (result.rows.length === 0) {
-    throw new Error("Invalid email or password");
+    const err = new Error("Invalid email or password");
+    err.status = 401;
+    throw err;
   }
 
   const user = result.rows[0];
-    if (role === "doctor" && user.approval_status !== "approved") {
-    throw new Error("Doctor account is not approved yet");
+
+  if (role === "doctor" && user.approval_status !== "approved") {
+    const err = new Error("Doctor account is not approved yet");
+    err.status = 403;
+    throw err;
   }
+
   const match = await bcrypt.compare(password, user.password);
 
   if (!match) {
-    throw new Error("Invalid email or password");
+    const err = new Error("Invalid email or password");
+    err.status = 401;
+    throw err;
   }
 
   const token = jwt.sign(
-  {
-    id: user[idField],
-    email: user.email,
-    role,
-    admin_role: user.admin_role || null
-  },
-  process.env.JWT_SECRET,
-  { expiresIn: "7d" }
-);
+    {
+      id: user[idField],
+      email: user.email,
+      role,
+      admin_role: user.admin_role || null
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
 
   return {
     success: true,
@@ -297,18 +335,23 @@ exports.getMe = async (userData) => {
       SELECT
         admin_id AS id,
         email,
+        admin_role,
         'admin' AS role
       FROM admin
       WHERE admin_id = $1
     `;
   } else {
-    throw new Error("Invalid role");
+    const err = new Error("Invalid role");
+    err.status = 400;
+    throw err;
   }
 
   const result = await pool.query(query, values);
 
   if (result.rows.length === 0) {
-    throw new Error("User not found");
+    const err = new Error("User not found");
+    err.status = 404;
+    throw err;
   }
 
   return {
@@ -317,34 +360,31 @@ exports.getMe = async (userData) => {
   };
 };
 
-
-
 exports.forgotPassword = async (data) => {
   const { email, role } = data;
 
   if (!email || !role) {
-    throw new Error("email and role are required");
+    const err = new Error("email and role are required");
+    err.status = 400;
+    throw err;
   }
 
-  let tableName = "";
-
-  if (role === "patient") {
-    tableName = "patient";
-  } else if (role === "doctor") {
-    tableName = "doctor";
-  } else if (role === "admin") {
-    tableName = "admin";
-  } else {
-    throw new Error("Invalid role");
+  const tableName = TABLE_MAP[role];
+  if (!tableName) {
+    const err = new Error("Invalid role");
+    err.status = 400;
+    throw err;
   }
 
   const userCheck = await pool.query(
-    `SELECT * FROM ${tableName} WHERE email = $1`,
+    `SELECT 1 FROM ${tableName} WHERE email = $1`,
     [email]
   );
 
   if (userCheck.rows.length === 0) {
-    throw new Error("No account found with this email");
+    const err = new Error("No account found with this email");
+    err.status = 404;
+    throw err;
   }
 
   const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -378,7 +418,9 @@ exports.resetPassword = async (data) => {
   const { email, role, otp, new_password } = data;
 
   if (!email || !role || !otp || !new_password) {
-    throw new Error("email, role, otp, and new_password are required");
+    const err = new Error("email, role, otp, and new_password are required");
+    err.status = 400;
+    throw err;
   }
 
   const codeResult = await pool.query(
@@ -393,19 +435,16 @@ exports.resetPassword = async (data) => {
   );
 
   if (codeResult.rows.length === 0) {
-    throw new Error("Invalid or expired OTP");
+    const err = new Error("Invalid or expired OTP");
+    err.status = 400;
+    throw err;
   }
 
-  let tableName = "";
-
-  if (role === "patient") {
-    tableName = "patient";
-  } else if (role === "doctor") {
-    tableName = "doctor";
-  } else if (role === "admin") {
-    tableName = "admin";
-  } else {
-    throw new Error("Invalid role");
+  const tableName = TABLE_MAP[role];
+  if (!tableName) {
+    const err = new Error("Invalid role");
+    err.status = 400;
+    throw err;
   }
 
   const hashedPassword = await bcrypt.hash(new_password, 10);

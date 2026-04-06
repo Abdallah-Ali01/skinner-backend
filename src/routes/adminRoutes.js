@@ -121,5 +121,5 @@ router.get("/reports", verifyToken, allowRoles("admin"), adminController.getRepo
  *       403:
  *         description: Only super admin can perform this action
  */
-router.post("/generate-admin-code", verifyToken, superAdminOnly, adminController.generateAdminCode);
+router.post("/generate-admin-code", verifyToken, allowRoles("admin"), superAdminOnly, adminController.generateAdminCode);
 module.exports = router;

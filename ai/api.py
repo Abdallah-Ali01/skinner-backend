@@ -5,10 +5,13 @@ from PIL import Image
 import io
 import tensorflow as tf
 
+import os
+
 # =====================
 # CONFIG (مطابق للنوتبوك)
 # =====================
-MODEL_PATH = "my_model.keras"
+_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(_DIR, "my_model.keras")
 IMG_SIZE = 384   # نفس النوتبوك
 TOP_K = 3
 

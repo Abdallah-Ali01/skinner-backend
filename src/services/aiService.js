@@ -1,7 +1,6 @@
 const axios = require("axios");
 const FormData = require("form-data");
 const fs = require("fs");
-require("dotenv").config();
 
 exports.predictImage = async (imagePath) => {
   const form = new FormData();

@@ -4,22 +4,28 @@ const aiService = require("./aiService");
 
 exports.uploadAndAnalyze = async (req) => {
   if (!req.file) {
-    throw new Error("No image uploaded");
+    const err = new Error("No image uploaded");
+    err.status = 400;
+    throw err;
   }
 
   const { patient_id } = req.body;
 
   if (!patient_id) {
-    throw new Error("patient_id is required");
+    const err = new Error("patient_id is required");
+    err.status = 400;
+    throw err;
   }
 
   const patientCheck = await pool.query(
-    `SELECT * FROM patient WHERE patient_id = $1`,
+    `SELECT 1 FROM patient WHERE patient_id = $1`,
     [patient_id]
   );
 
   if (patientCheck.rows.length === 0) {
-    throw new Error("Patient not found");
+    const err = new Error("Patient not found");
+    err.status = 404;
+    throw err;
   }
 
   const imagePath = req.file.path;
@@ -27,7 +33,7 @@ exports.uploadAndAnalyze = async (req) => {
 
   const aiResult = await aiService.predictImage(imagePath);
 
-  const chatId = uuidv4();
+  const analysisId = uuidv4();
 
   const analysisText = `Predicted class: ${aiResult.predicted_class}, Confidence: ${aiResult.confidence}`;
   const treatmentSuggestion = JSON.stringify(aiResult.top_k);
@@ -35,12 +41,12 @@ exports.uploadAndAnalyze = async (req) => {
 
   await pool.query(
     `
-    INSERT INTO chat_analysis
-    (chat_id, patient_id, analysis, skin_image_upload, treatment_suggestion, skin_disease_classification, doctor_recommendation, created_at)
+    INSERT INTO analysis
+    (analysis_id, patient_id, analysis, skin_image_upload, treatment_suggestion, skin_disease_classification, doctor_recommendation, created_at)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     `,
     [
-      chatId,
+      analysisId,
       patient_id,
       analysisText,
       imageUrl,
@@ -64,7 +70,7 @@ exports.uploadAndAnalyze = async (req) => {
     success: true,
     message: "Image analyzed successfully",
     data: {
-      chat_id: chatId,
+      analysis_id: analysisId,
       image_url: imageUrl,
       predicted_class: aiResult.predicted_class,
       confidence: aiResult.confidence,
@@ -73,18 +79,16 @@ exports.uploadAndAnalyze = async (req) => {
   };
 };
 
-exports.getAnalysisById = async (chatId) => {
+exports.getAnalysisById = async (analysisId) => {
   const result = await pool.query(
-    `
-    SELECT *
-    FROM chat_analysis
-    WHERE chat_id = $1
-    `,
-    [chatId]
+    `SELECT * FROM analysis WHERE analysis_id = $1`,
+    [analysisId]
   );
 
   if (result.rows.length === 0) {
-    throw new Error("Analysis not found");
+    const err = new Error("Analysis not found");
+    err.status = 404;
+    throw err;
   }
 
   return {
@@ -97,17 +101,17 @@ exports.getPatientHistory = async (patientId) => {
   const result = await pool.query(
     `
     SELECT
-      c.chat_id,
-      c.patient_id,
-      c.skin_image_upload,
-      c.skin_disease_classification,
-      c.analysis,
-      c.treatment_suggestion,
-      c.doctor_recommendation,
-      c.created_at
-    FROM chat_analysis c
-    WHERE c.patient_id = $1
-    ORDER BY c.created_at DESC
+      a.analysis_id,
+      a.patient_id,
+      a.skin_image_upload,
+      a.skin_disease_classification,
+      a.analysis,
+      a.treatment_suggestion,
+      a.doctor_recommendation,
+      a.created_at
+    FROM analysis a
+    WHERE a.patient_id = $1
+    ORDER BY a.created_at DESC
     `,
     [patientId]
   );

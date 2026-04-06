@@ -14,24 +14,6 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
 
 /**
  * @swagger
- * components:
- *   schemas:
- *     UploadAndAnalyzeRequest:
- *       type: object
- *       required:
- *         - patient_id
- *         - image
- *       properties:
- *         patient_id:
- *           type: string
- *           example: fd3d3430-d8f0-49a6-958d-9739dd379dd1
- *         image:
- *           type: string
- *           format: binary
- */
-
-/**
- * @swagger
  * /api/analysis/upload-and-analyze:
  *   post:
  *     summary: Upload skin image and run AI analysis
@@ -43,10 +25,20 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
  *       content:
  *         multipart/form-data:
  *           schema:
- *             $ref: '#/components/schemas/UploadAndAnalyzeRequest'
+ *             type: object
+ *             required:
+ *               - patient_id
+ *               - image
+ *             properties:
+ *               patient_id:
+ *                 type: string
+ *                 example: fd3d3430-d8f0-49a6-958d-9739dd379dd1
+ *               image:
+ *                 type: string
+ *                 format: binary
  *     responses:
  *       200:
- *         description: Image analyzed successfully
+ *         description: Image analyzed successfully — returns analysis_id
  *       500:
  *         description: Server error
  */
@@ -83,20 +75,26 @@ router.get(
   "/patient/:patientId/history",
   verifyToken,
   allowRoles("patient", "admin"),
+  (req, res, next) => {
+    if (req.user.role === "patient" && req.user.id !== req.params.patientId) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+    next();
+  },
   analysisController.getPatientHistory
 );
 
 /**
  * @swagger
- * /api/analysis/{chatId}:
+ * /api/analysis/{analysisId}:
  *   get:
- *     summary: Get analysis by chat ID
+ *     summary: Get analysis by analysis ID
  *     tags: [Analysis]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: chatId
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
@@ -104,11 +102,11 @@ router.get(
  *     responses:
  *       200:
  *         description: Analysis details
- *       500:
- *         description: Server error
+ *       404:
+ *         description: Analysis not found
  */
 router.get(
-  "/:chatId",
+  "/:analysisId",
   verifyToken,
   allowRoles("patient", "doctor", "admin"),
   analysisController.getAnalysisById

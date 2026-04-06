@@ -45,7 +45,7 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
  * @swagger
  * /api/payment/pay:
  *   post:
- *     summary: Pay for an appointment
+ *     summary: Pay for an appointment (creates a chat room between patient and doctor)
  *     tags: [Payment]
  *     security:
  *       - bearerAuth: []
@@ -57,7 +57,7 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
  *             $ref: '#/components/schemas/PayAppointmentRequest'
  *     responses:
  *       201:
- *         description: Payment completed successfully
+ *         description: Payment completed — returns chat_id for messaging
  *       500:
  *         description: Server error
  */
@@ -77,10 +77,9 @@ router.post("/pay", verifyToken, allowRoles("patient"), paymentController.payApp
  *         required: true
  *         schema:
  *           type: string
- *         example: 11111111-1111-1111-1111-111111111111
  *     responses:
  *       200:
- *         description: Payment details
+ *         description: Payment details (includes chat_id)
  */
 router.get("/appointment/:appointmentId", verifyToken, allowRoles("patient", "doctor", "admin"), paymentController.getPaymentByAppointmentId);
 
@@ -98,11 +97,15 @@ router.get("/appointment/:appointmentId", verifyToken, allowRoles("patient", "do
  *         required: true
  *         schema:
  *           type: string
- *         example: fd3d3430-d8f0-49a6-958d-9739dd379dd1
  *     responses:
  *       200:
  *         description: Patient payments
  */
-router.get("/patient/:patientId", verifyToken, allowRoles("patient", "admin"), paymentController.getPatientPayments);
+router.get("/patient/:patientId", verifyToken, allowRoles("patient", "admin"), (req, res, next) => {
+  if (req.user.role === "patient" && req.user.id !== req.params.patientId) {
+    return res.status(403).json({ success: false, message: "Access denied" });
+  }
+  next();
+}, paymentController.getPatientPayments);
 
 module.exports = router;

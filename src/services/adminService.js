@@ -34,25 +34,31 @@ exports.approveDoctor = async (data) => {
   const { admin_id, medical_syndicate_id_card } = data;
 
   if (!admin_id || !medical_syndicate_id_card) {
-    throw new Error("admin_id and medical_syndicate_id_card are required");
+    const err = new Error("admin_id and medical_syndicate_id_card are required");
+    err.status = 400;
+    throw err;
   }
 
   const adminCheck = await pool.query(
-    `SELECT * FROM admin WHERE admin_id = $1`,
+    `SELECT 1 FROM admin WHERE admin_id = $1`,
     [admin_id]
   );
 
   if (adminCheck.rows.length === 0) {
-    throw new Error("Admin not found");
+    const err = new Error("Admin not found");
+    err.status = 404;
+    throw err;
   }
 
   const doctorCheck = await pool.query(
-    `SELECT * FROM doctor WHERE medical_syndicate_id_card = $1`,
+    `SELECT 1 FROM doctor WHERE medical_syndicate_id_card = $1`,
     [medical_syndicate_id_card]
   );
 
   if (doctorCheck.rows.length === 0) {
-    throw new Error("Doctor not found");
+    const err = new Error("Doctor not found");
+    err.status = 404;
+    throw err;
   }
 
   await pool.query(
@@ -76,16 +82,20 @@ exports.rejectDoctor = async (data) => {
   const { medical_syndicate_id_card } = data;
 
   if (!medical_syndicate_id_card) {
-    throw new Error("medical_syndicate_id_card is required");
+    const err = new Error("medical_syndicate_id_card is required");
+    err.status = 400;
+    throw err;
   }
 
   const doctorCheck = await pool.query(
-    `SELECT * FROM doctor WHERE medical_syndicate_id_card = $1`,
+    `SELECT 1 FROM doctor WHERE medical_syndicate_id_card = $1`,
     [medical_syndicate_id_card]
   );
 
   if (doctorCheck.rows.length === 0) {
-    throw new Error("Doctor not found");
+    const err = new Error("Doctor not found");
+    err.status = 404;
+    throw err;
   }
 
   await pool.query(
@@ -107,16 +117,24 @@ exports.getReports = async () => {
   const result = await pool.query(
     `
     SELECT
-      report_id,
-      doctor_name,
-      patient_name,
-      patient_id,
-      date,
-      diagnosis,
-      medical_syndicate_id_card,
-      chat_id
-    FROM report
-    ORDER BY date DESC
+      r.report_id,
+      r.appointment_id,
+      r.patient_id,
+      r.medical_syndicate_id_card,
+      r.diagnosis,
+      r.prescription,
+      r.notes,
+      r.created_at,
+      d.name AS doctor_name,
+      p.name AS patient_name,
+      a.analysis_id,
+      ch.chat_id
+    FROM report r
+    JOIN appointment a ON r.appointment_id = a.appointment_id
+    JOIN doctor d ON r.medical_syndicate_id_card = d.medical_syndicate_id_card
+    JOIN patient p ON r.patient_id = p.patient_id
+    LEFT JOIN chat ch ON a.appointment_id = ch.appointment_id
+    ORDER BY r.created_at DESC
     `
   );
 
@@ -129,12 +147,14 @@ exports.getReports = async () => {
 
 exports.generateAdminCode = async (adminId) => {
   const adminCheck = await pool.query(
-    `SELECT * FROM admin WHERE admin_id = $1`,
+    `SELECT 1 FROM admin WHERE admin_id = $1`,
     [adminId]
   );
 
   if (adminCheck.rows.length === 0) {
-    throw new Error("Admin not found");
+    const err = new Error("Admin not found");
+    err.status = 404;
+    throw err;
   }
 
   const inviteCode = "ADM-" + crypto.randomBytes(4).toString("hex").toUpperCase();

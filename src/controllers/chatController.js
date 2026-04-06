@@ -1,6 +1,5 @@
 const chatService = require("../services/chatService");
 
-// الوظيفة اللي كانت ناقصة وسببت الـ Crash
 exports.checkChatAccess = async (req, res) => {
   try {
     const { chatId } = req.params;
@@ -13,28 +12,40 @@ exports.checkChatAccess = async (req, res) => {
   }
 };
 
-// src/controllers/chatController.js
 exports.sendMessage = async (req, res) => {
   try {
     const { chat_id, message_text } = req.body;
-    let file_path = null;
+
+    if (!chat_id) {
+      return res.status(400).json({ success: false, message: "chat_id is required" });
+    }
+
+    // Access check — only allow if payment is confirmed
+    const access = await chatService.checkAccess(chat_id, req.user.id, req.user.role);
+    if (!access.allowed) {
+      return res.status(403).json({ success: false, message: "Access denied or payment required" });
+    }
+
+    let file_url = null;
     let original_name = null;
     let type = 'text';
 
-    // ... (كود الـ access سيبه زي ما هو)
-
     if (req.file) {
       type = req.file.mimetype === 'application/pdf' ? 'file' : 'image';
-      file_path = `/uploads/chat/${req.file.filename}`;
+      file_url = `/uploads/chat/${req.file.filename}`;
       original_name = req.file.originalname;
+    }
+
+    if (!message_text && !req.file) {
+      return res.status(400).json({ success: false, message: "message_text or file is required" });
     }
 
     const message = await chatService.saveMessage({
       chat_id,
-      message_text: message_text || null, // النص بتاعك "check this file" هيفضل هنا
+      message_text: message_text || null,
       message_type: type,
       original_filename: original_name,
-      file_url: file_path, // المسار هيروح هنا
+      file_url,
       sender_id: req.user.id,
       sender_role: req.user.role
     });
