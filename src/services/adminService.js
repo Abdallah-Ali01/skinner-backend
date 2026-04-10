@@ -30,18 +30,18 @@ exports.getPendingDoctors = async () => {
   };
 };
 
-exports.approveDoctor = async (data) => {
-  const { admin_id, medical_syndicate_id_card } = data;
+exports.approveDoctor = async (adminId, data) => {
+  const { medical_syndicate_id_card } = data;
 
-  if (!admin_id || !medical_syndicate_id_card) {
-    const err = new Error("admin_id and medical_syndicate_id_card are required");
+  if (!medical_syndicate_id_card) {
+    const err = new Error("medical_syndicate_id_card is required");
     err.status = 400;
     throw err;
   }
 
   const adminCheck = await pool.query(
     `SELECT 1 FROM admin WHERE admin_id = $1`,
-    [admin_id]
+    [adminId]
   );
 
   if (adminCheck.rows.length === 0) {
@@ -51,13 +51,19 @@ exports.approveDoctor = async (data) => {
   }
 
   const doctorCheck = await pool.query(
-    `SELECT 1 FROM doctor WHERE medical_syndicate_id_card = $1`,
+    `SELECT approval_status FROM doctor WHERE medical_syndicate_id_card = $1`,
     [medical_syndicate_id_card]
   );
 
   if (doctorCheck.rows.length === 0) {
     const err = new Error("Doctor not found");
     err.status = 404;
+    throw err;
+  }
+
+  if (doctorCheck.rows[0].approval_status !== 'pending') {
+    const err = new Error(`Doctor is already ${doctorCheck.rows[0].approval_status}`);
+    err.status = 409;
     throw err;
   }
 
@@ -69,7 +75,7 @@ exports.approveDoctor = async (data) => {
       approval_status = 'approved'
     WHERE medical_syndicate_id_card = $2
     `,
-    [admin_id, medical_syndicate_id_card]
+    [adminId, medical_syndicate_id_card]
   );
 
   return {
@@ -88,13 +94,19 @@ exports.rejectDoctor = async (data) => {
   }
 
   const doctorCheck = await pool.query(
-    `SELECT 1 FROM doctor WHERE medical_syndicate_id_card = $1`,
+    `SELECT approval_status FROM doctor WHERE medical_syndicate_id_card = $1`,
     [medical_syndicate_id_card]
   );
 
   if (doctorCheck.rows.length === 0) {
     const err = new Error("Doctor not found");
     err.status = 404;
+    throw err;
+  }
+
+  if (doctorCheck.rows[0].approval_status !== 'pending') {
+    const err = new Error(`Doctor is already ${doctorCheck.rows[0].approval_status}`);
+    err.status = 409;
     throw err;
   }
 

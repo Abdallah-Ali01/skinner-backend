@@ -22,7 +22,6 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
  *         - method
  *         - card_holder_name
  *         - card_last4
- *         - amount
  *       properties:
  *         appointment_id:
  *           type: string
@@ -36,9 +35,6 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
  *         card_last4:
  *           type: string
  *           example: "1234"
- *         amount:
- *           type: number
- *           example: 300
  */
 
 /**
@@ -58,6 +54,8 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
  *     responses:
  *       201:
  *         description: Payment completed — returns chat_id for messaging
+ *       403:
+ *         description: Appointment does not belong to this user
  *       500:
  *         description: Server error
  */
@@ -67,7 +65,7 @@ router.post("/pay", verifyToken, allowRoles("patient"), paymentController.payApp
  * @swagger
  * /api/payment/appointment/{appointmentId}:
  *   get:
- *     summary: Get payment by appointment ID
+ *     summary: Get payment by appointment ID (ownership verified)
  *     tags: [Payment]
  *     security:
  *       - bearerAuth: []
@@ -80,32 +78,23 @@ router.post("/pay", verifyToken, allowRoles("patient"), paymentController.payApp
  *     responses:
  *       200:
  *         description: Payment details (includes chat_id)
+ *       403:
+ *         description: Access denied
  */
 router.get("/appointment/:appointmentId", verifyToken, allowRoles("patient", "doctor", "admin"), paymentController.getPaymentByAppointmentId);
 
 /**
  * @swagger
- * /api/payment/patient/{patientId}:
+ * /api/payment/my:
  *   get:
- *     summary: Get all payments for a patient
+ *     summary: Get all payments for the logged-in patient
  *     tags: [Payment]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: patientId
- *         required: true
- *         schema:
- *           type: string
  *     responses:
  *       200:
  *         description: Patient payments
  */
-router.get("/patient/:patientId", verifyToken, allowRoles("patient", "admin"), (req, res, next) => {
-  if (req.user.role === "patient" && req.user.id !== req.params.patientId) {
-    return res.status(403).json({ success: false, message: "Access denied" });
-  }
-  next();
-}, paymentController.getPatientPayments);
+router.get("/my", verifyToken, allowRoles("patient"), paymentController.getMyPayments);
 
 module.exports = router;

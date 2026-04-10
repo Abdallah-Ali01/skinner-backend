@@ -27,12 +27,8 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
  *           schema:
  *             type: object
  *             required:
- *               - patient_id
  *               - image
  *             properties:
- *               patient_id:
- *                 type: string
- *                 example: fd3d3430-d8f0-49a6-958d-9739dd379dd1
  *               image:
  *                 type: string
  *                 format: binary
@@ -52,19 +48,12 @@ router.post(
 
 /**
  * @swagger
- * /api/analysis/patient/{patientId}/history:
+ * /api/analysis/history:
  *   get:
- *     summary: Get all analyses for a patient
+ *     summary: Get all analyses for the logged-in patient
  *     tags: [Analysis]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: patientId
- *         required: true
- *         schema:
- *           type: string
- *         example: fd3d3430-d8f0-49a6-958d-9739dd379dd1
  *     responses:
  *       200:
  *         description: Patient analysis history
@@ -72,15 +61,9 @@ router.post(
  *         description: Server error
  */
 router.get(
-  "/patient/:patientId/history",
+  "/history",
   verifyToken,
-  allowRoles("patient", "admin"),
-  (req, res, next) => {
-    if (req.user.role === "patient" && req.user.id !== req.params.patientId) {
-      return res.status(403).json({ success: false, message: "Access denied" });
-    }
-    next();
-  },
+  allowRoles("patient"),
   analysisController.getPatientHistory
 );
 

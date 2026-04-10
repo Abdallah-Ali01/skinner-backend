@@ -20,7 +20,6 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
  *       required:
  *         - appointment_id
  *         - diagnosis
- *         - medical_syndicate_id_card
  *       properties:
  *         appointment_id:
  *           type: string
@@ -34,9 +33,6 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
  *         notes:
  *           type: string
  *           example: Follow up in 2 weeks if no improvement
- *         medical_syndicate_id_card:
- *           type: string
- *           example: DOC-2001
  */
 
 /**
@@ -111,5 +107,69 @@ router.get("/case/:appointmentId", verifyToken, allowRoles("doctor"), doctorCont
  *         description: Server error
  */
 router.post("/review-case", verifyToken, allowRoles("doctor"), doctorController.reviewCase);
+
+const availabilityController = require("../controllers/availabilityController");
+
+/**
+ * @swagger
+ * /api/doctor/availability:
+ *   put:
+ *     summary: Set or update the doctor's weekly availability schedule
+ *     tags: [Doctor]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - schedule
+ *             properties:
+ *               schedule:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - day_of_week
+ *                     - start_time
+ *                     - end_time
+ *                   properties:
+ *                     day_of_week:
+ *                       type: integer
+ *                       description: "0=Sunday, 1=Monday, ... 6=Saturday"
+ *                       example: 6
+ *                     start_time:
+ *                       type: string
+ *                       example: "08:30"
+ *                     end_time:
+ *                       type: string
+ *                       example: "16:30"
+ *                     slot_duration_minutes:
+ *                       type: integer
+ *                       example: 30
+ *                     is_active:
+ *                       type: boolean
+ *                       example: true
+ *     responses:
+ *       200:
+ *         description: Availability updated successfully
+ */
+router.put("/availability", verifyToken, allowRoles("doctor"), availabilityController.setAvailability);
+
+/**
+ * @swagger
+ * /api/doctor/availability:
+ *   get:
+ *     summary: Get the doctor's own weekly availability schedule
+ *     tags: [Doctor]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Doctor's weekly schedule
+ */
+router.get("/availability", verifyToken, allowRoles("doctor"), availabilityController.getMyAvailability);
 
 module.exports = router;

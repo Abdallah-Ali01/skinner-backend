@@ -47,17 +47,19 @@ exports.getReviewedCases = async (doctorId) => {
       r.report_id,
       r.appointment_id,
       r.patient_id,
-      r.patient_name,
-      r.doctor_name,
+      p.name AS patient_name,
+      d.name AS doctor_name,
       r.diagnosis,
-      r.date,
+      r.created_at AS date,
       a.analysis_id,
       c.chat_id
     FROM report r
     JOIN appointment a ON r.appointment_id = a.appointment_id
+    JOIN patient p ON r.patient_id = p.patient_id
+    JOIN doctor d ON r.medical_syndicate_id_card = d.medical_syndicate_id_card
     LEFT JOIN chat c ON a.appointment_id = c.appointment_id
     WHERE r.medical_syndicate_id_card = $1
-    ORDER BY r.date DESC
+    ORDER BY r.created_at DESC
   `, [doctorId]);
 
   return {
@@ -111,17 +113,18 @@ exports.getCaseDetails = async (doctorId, appointmentId) => {
   };
 };
 
-exports.reviewCase = async (data) => {
+exports.reviewCase = async (doctorId, data) => {
   const {
     appointment_id,
     diagnosis,
     prescription,
-    notes,
-    medical_syndicate_id_card
+    notes
   } = data;
 
-  if (!appointment_id || !diagnosis || !medical_syndicate_id_card) {
-    const err = new Error("appointment_id, diagnosis, and medical_syndicate_id_card are required");
+  const medical_syndicate_id_card = doctorId;
+
+  if (!appointment_id || !diagnosis) {
+    const err = new Error("appointment_id and diagnosis are required");
     err.status = 400;
     throw err;
   }

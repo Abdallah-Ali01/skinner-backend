@@ -176,3 +176,20 @@ CREATE TABLE IF NOT EXISTS password_reset (
     CONSTRAINT password_reset_role_check
         CHECK (role IN ('patient', 'doctor', 'admin'))
 );
+
+-- =========================================
+-- DOCTOR_AVAILABILITY (weekly schedule)
+-- Each row = one day the doctor is available
+-- =========================================
+CREATE TABLE IF NOT EXISTS doctor_availability (
+    availability_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    medical_syndicate_id_card VARCHAR(100) NOT NULL REFERENCES doctor(medical_syndicate_id_card) ON DELETE CASCADE,
+    day_of_week INT NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    slot_duration_minutes INT NOT NULL DEFAULT 30,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    CONSTRAINT day_of_week_check CHECK (day_of_week >= 0 AND day_of_week <= 6),
+    CONSTRAINT slot_duration_check CHECK (slot_duration_minutes > 0 AND slot_duration_minutes <= 120),
+    CONSTRAINT unique_doctor_day UNIQUE (medical_syndicate_id_card, day_of_week)
+);

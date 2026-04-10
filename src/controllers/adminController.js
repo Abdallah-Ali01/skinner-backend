@@ -14,7 +14,7 @@ exports.getPendingDoctors = async (req, res) => {
 
 exports.approveDoctor = async (req, res) => {
   try {
-    const result = await adminService.approveDoctor(req.body);
+    const result = await adminService.approveDoctor(req.user.id, req.body);
     res.status(200).json(result);
   } catch (error) {
     res.status(error.status || 500).json({

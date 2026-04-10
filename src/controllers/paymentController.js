@@ -2,7 +2,7 @@ const paymentService = require("../services/paymentService");
 
 exports.payAppointment = async (req, res) => {
   try {
-    const result = await paymentService.payAppointment(req.body);
+    const result = await paymentService.payAppointment(req.user.id, req.body);
     res.status(201).json(result);
   } catch (error) {
     res.status(error.status || 500).json({
@@ -14,7 +14,7 @@ exports.payAppointment = async (req, res) => {
 
 exports.getPaymentByAppointmentId = async (req, res) => {
   try {
-    const result = await paymentService.getPaymentByAppointmentId(req.params.appointmentId);
+    const result = await paymentService.getPaymentByAppointmentId(req.params.appointmentId, req.user);
     res.status(200).json(result);
   } catch (error) {
     res.status(error.status || 500).json({
@@ -24,9 +24,9 @@ exports.getPaymentByAppointmentId = async (req, res) => {
   }
 };
 
-exports.getPatientPayments = async (req, res) => {
+exports.getMyPayments = async (req, res) => {
   try {
-    const result = await paymentService.getPatientPayments(req.params.patientId);
+    const result = await paymentService.getPatientPayments(req.user.id);
     res.status(200).json(result);
   } catch (error) {
     res.status(error.status || 500).json({

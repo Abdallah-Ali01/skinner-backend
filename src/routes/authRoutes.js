@@ -82,6 +82,9 @@ const uploadDoctorCard = require("../services/doctorCardUploadService");
  *         clinic_address:
  *           type: string
  *           example: Alexandria
+ *         consultation_fee:
+ *           type: number
+ *           example: 150
  *
  *     RegisterAdminRequest:
  *       type: object
@@ -121,29 +124,21 @@ const uploadDoctorCard = require("../services/doctorCardUploadService");
  *       type: object
  *       required:
  *         - email
- *         - role
  *       properties:
  *         email:
  *           type: string
  *           example: abdallahtako5@gmail.com
- *         role:
- *           type: string
- *           example: patient
  *
  *     ResetPasswordRequest:
  *       type: object
  *       required:
  *         - email
- *         - role
  *         - otp
  *         - new_password
  *       properties:
  *         email:
  *           type: string
  *           example: abdallahtako5@gmail.com
- *         role:
- *           type: string
- *           example: patient
  *         otp:
  *           type: string
  *           example: "483921"
@@ -222,6 +217,9 @@ router.post("/register-patient", authController.registerPatient);
  *               clinic_address:
  *                 type: string
  *                 example: Alexandria
+ *               consultation_fee:
+ *                 type: number
+ *                 example: 150
  *               syndicate_card_image:
  *                 type: string
  *                 format: binary
@@ -272,21 +270,8 @@ router.post("/register-admin", authController.registerAdmin);
  */
 router.post("/login", authController.login);
 
-/**
- * @swagger
- * /api/auth/me:
- *   get:
- *     summary: Get current logged in user
- *     tags: [Auth]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Current user info
- *       401:
- *         description: Unauthorized
- */
-router.get("/me", verifyToken, authController.getMe);
+
+
 
 /**
  * @swagger

@@ -14,7 +14,7 @@ exports.uploadAndAnalyze = async (req, res) => {
 
 exports.getAnalysisById = async (req, res) => {
   try {
-    const result = await analysisService.getAnalysisById(req.params.analysisId);
+    const result = await analysisService.getAnalysisById(req.params.analysisId, req.user);
     res.status(200).json(result);
   } catch (error) {
     res.status(error.status || 500).json({
@@ -26,7 +26,7 @@ exports.getAnalysisById = async (req, res) => {
 
 exports.getPatientHistory = async (req, res) => {
   try {
-    const result = await analysisService.getPatientHistory(req.params.patientId);
+    const result = await analysisService.getPatientHistory(req.user.id);
     res.status(200).json(result);
   } catch (error) {
     res.status(error.status || 500).json({

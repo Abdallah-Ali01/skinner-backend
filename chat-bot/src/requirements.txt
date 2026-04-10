@@ -1,0 +1,13 @@
+pymupdf
+tqdm
+faiss-cpu
+numpy
+langchain-experimental
+langchain-huggingface
+sentence-transformers
+colorlog
+pydantic-settings
+fastapi
+uvicorn
+langdetect
+cohere

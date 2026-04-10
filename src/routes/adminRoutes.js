@@ -19,12 +19,8 @@ const superAdminOnly = require("../middlewares/superAdminMiddleware");
  *     ApproveDoctorRequest:
  *       type: object
  *       required:
- *         - admin_id
  *         - medical_syndicate_id_card
  *       properties:
- *         admin_id:
- *           type: string
- *           example: 11111111-1111-1111-1111-111111111111
  *         medical_syndicate_id_card:
  *           type: string
  *           example: DOC-2001

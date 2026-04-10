@@ -61,7 +61,8 @@ exports.registerDoctor = async (data, file) => {
     year_of_experience,
     specialization,
     clinic_address,
-    admin_id
+    admin_id,
+    consultation_fee
   } = data;
 
   if (
@@ -113,9 +114,10 @@ exports.registerDoctor = async (data, file) => {
       clinic_address,
       admin_id,
       approval_status,
-      syndicate_card_image
+      syndicate_card_image,
+      consultation_fee
     )
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
     `,
     [
       medical_syndicate_id_card,
@@ -131,7 +133,8 @@ exports.registerDoctor = async (data, file) => {
       clinic_address || null,
       admin_id || null,
       "pending",
-      syndicateCardImage
+      syndicateCardImage,
+      consultation_fee || 0
     ]
   );
 
@@ -311,6 +314,9 @@ exports.getMe = async (userData) => {
         gender,
         age,
         address,
+        patient_history,
+        scan_image,
+        created_at,
         'patient' AS role
       FROM patient
       WHERE patient_id = $1
@@ -325,6 +331,11 @@ exports.getMe = async (userData) => {
         gender,
         specialization,
         clinic_address,
+        year_of_experience,
+        rate,
+        consultation_fee,
+        national_id,
+        syndicate_card_image,
         approval_status,
         'doctor' AS role
       FROM doctor
@@ -360,28 +371,32 @@ exports.getMe = async (userData) => {
   };
 };
 
+/**
+ * Search all role tables and return the role for a given email.
+ */
+async function detectRoleByEmail(email) {
+  for (const role of Object.keys(TABLE_MAP)) {
+    const result = await pool.query(
+      `SELECT 1 FROM ${TABLE_MAP[role]} WHERE email = $1`,
+      [email]
+    );
+    if (result.rows.length > 0) return role;
+  }
+  return null;
+}
+
 exports.forgotPassword = async (data) => {
-  const { email, role } = data;
+  const { email } = data;
 
-  if (!email || !role) {
-    const err = new Error("email and role are required");
+  if (!email) {
+    const err = new Error("email is required");
     err.status = 400;
     throw err;
   }
 
-  const tableName = TABLE_MAP[role];
-  if (!tableName) {
-    const err = new Error("Invalid role");
-    err.status = 400;
-    throw err;
-  }
+  const role = await detectRoleByEmail(email);
 
-  const userCheck = await pool.query(
-    `SELECT 1 FROM ${tableName} WHERE email = $1`,
-    [email]
-  );
-
-  if (userCheck.rows.length === 0) {
+  if (!role) {
     const err = new Error("No account found with this email");
     err.status = 404;
     throw err;
@@ -415,10 +430,10 @@ exports.forgotPassword = async (data) => {
 };
 
 exports.resetPassword = async (data) => {
-  const { email, role, otp, new_password } = data;
+  const { email, otp, new_password } = data;
 
-  if (!email || !role || !otp || !new_password) {
-    const err = new Error("email, role, otp, and new_password are required");
+  if (!email || !otp || !new_password) {
+    const err = new Error("email, otp, and new_password are required");
     err.status = 400;
     throw err;
   }
@@ -427,11 +442,10 @@ exports.resetPassword = async (data) => {
     `
     SELECT * FROM password_reset
     WHERE email = $1
-      AND role = $2
-      AND reset_code = $3
+      AND reset_code = $2
       AND expires_at > NOW()
     `,
-    [email, role, otp]
+    [email, otp]
   );
 
   if (codeResult.rows.length === 0) {
@@ -440,12 +454,8 @@ exports.resetPassword = async (data) => {
     throw err;
   }
 
+  const role = codeResult.rows[0].role;
   const tableName = TABLE_MAP[role];
-  if (!tableName) {
-    const err = new Error("Invalid role");
-    err.status = 400;
-    throw err;
-  }
 
   const hashedPassword = await bcrypt.hash(new_password, 10);
 
@@ -455,8 +465,8 @@ exports.resetPassword = async (data) => {
   );
 
   await pool.query(
-    `DELETE FROM password_reset WHERE email = $1 AND role = $2`,
-    [email, role]
+    `DELETE FROM password_reset WHERE email = $1`,
+    [email]
   );
 
   return {

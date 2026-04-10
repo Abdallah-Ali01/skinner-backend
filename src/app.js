@@ -11,6 +11,9 @@ const paymentRoutes = require("./routes/paymentRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
+const patientDoctorRoutes = require("./routes/patientDoctorRoutes");
+const profileRoutes = require("./routes/profileRoutes");
+const chatbotRoutes = require("./routes/chatbotRoutes");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
 const { errorHandler } = require("./middlewares/errorMiddleware");
@@ -56,6 +59,9 @@ app.use("/api/payment", paymentRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/upload", uploadRoutes);
+app.use("/api/doctors", patientDoctorRoutes);
+app.use("/api/profile", profileRoutes);
+app.use("/api/chatbot", chatbotRoutes);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Error handler — must be LAST middleware

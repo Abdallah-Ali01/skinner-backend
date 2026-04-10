@@ -18,25 +18,13 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
  *     BookAppointmentRequest:
  *       type: object
  *       required:
- *         - patient_id
  *         - medical_syndicate_id_card
- *         - doctor_name
- *         - total_cost
  *         - date
  *         - analysis_id
  *       properties:
- *         patient_id:
- *           type: string
- *           example: fd3d3430-d8f0-49a6-958d-9739dd379dd1
  *         medical_syndicate_id_card:
  *           type: string
  *           example: DOC-2001
- *         doctor_name:
- *           type: string
- *           example: Dr. Ahmed Ali
- *         total_cost:
- *           type: number
- *           example: 300
  *         date:
  *           type: string
  *           example: 2026-03-15T10:30:00.000Z
@@ -69,53 +57,54 @@ router.post("/book", verifyToken, allowRoles("patient"), appointmentController.b
 
 /**
  * @swagger
- * /api/appointment/patient/{patientId}:
+ * /api/appointment/my:
  *   get:
- *     summary: Get all appointments for a patient
+ *     summary: Get all appointments for the logged-in user (patient or doctor)
  *     tags: [Appointment]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: patientId
- *         required: true
- *         schema:
- *           type: string
  *     responses:
  *       200:
- *         description: Patient appointments (includes chat_id if payment was made)
+ *         description: User appointments (includes chat_id if payment was made)
  */
-router.get("/patient/:patientId", verifyToken, allowRoles("patient", "admin"), (req, res, next) => {
-  if (req.user.role === "patient" && req.user.id !== req.params.patientId) {
-    return res.status(403).json({ success: false, message: "Access denied" });
-  }
-  next();
-}, appointmentController.getPatientAppointments);
+router.get("/my", verifyToken, allowRoles("patient", "doctor"), appointmentController.getMyAppointments);
 
 /**
  * @swagger
- * /api/appointment/doctor/{doctorId}:
+ * /api/appointment/my-reports:
  *   get:
- *     summary: Get all appointments for a doctor
+ *     summary: Get all doctor reports/advice for the logged-in patient
+ *     tags: [Appointment]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: All reports with doctor diagnosis, prescription, and notes
+ */
+router.get("/my-reports", verifyToken, allowRoles("patient"), appointmentController.getMyReports);
+
+/**
+ * @swagger
+ * /api/appointment/report/{appointmentId}:
+ *   get:
+ *     summary: Get a specific report by appointment ID (ownership verified)
  *     tags: [Appointment]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: doctorId
+ *         name: appointmentId
  *         required: true
  *         schema:
  *           type: string
- *         example: DOC-2001
  *     responses:
  *       200:
- *         description: Doctor appointments
+ *         description: Full report details (diagnosis, prescription, notes, analysis data)
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: Report not found
  */
-router.get("/doctor/:doctorId", verifyToken, allowRoles("doctor", "admin"), (req, res, next) => {
-  if (req.user.role === "doctor" && req.user.id !== req.params.doctorId) {
-    return res.status(403).json({ success: false, message: "Access denied" });
-  }
-  next();
-}, appointmentController.getDoctorAppointments);
+router.get("/report/:appointmentId", verifyToken, allowRoles("patient", "doctor", "admin"), appointmentController.getReportByAppointmentId);
 
 module.exports = router;

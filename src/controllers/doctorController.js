@@ -42,7 +42,8 @@ exports.getCaseDetails = async (req, res) => {
 
 exports.reviewCase = async (req, res) => {
   try {
-    const result = await doctorService.reviewCase(req.body);
+    const doctor_id = req.user.id;
+    const result = await doctorService.reviewCase(doctor_id, req.body);
     res.status(201).json(result);
   } catch (error) {
     res.status(error.status || 500).json({

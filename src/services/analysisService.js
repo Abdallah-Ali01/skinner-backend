@@ -9,13 +9,7 @@ exports.uploadAndAnalyze = async (req) => {
     throw err;
   }
 
-  const { patient_id } = req.body;
-
-  if (!patient_id) {
-    const err = new Error("patient_id is required");
-    err.status = 400;
-    throw err;
-  }
+  const patient_id = req.user.id;
 
   const patientCheck = await pool.query(
     `SELECT 1 FROM patient WHERE patient_id = $1`,
@@ -79,7 +73,7 @@ exports.uploadAndAnalyze = async (req) => {
   };
 };
 
-exports.getAnalysisById = async (analysisId) => {
+exports.getAnalysisById = async (analysisId, user) => {
   const result = await pool.query(
     `SELECT * FROM analysis WHERE analysis_id = $1`,
     [analysisId]
@@ -91,9 +85,30 @@ exports.getAnalysisById = async (analysisId) => {
     throw err;
   }
 
+  const analysis = result.rows[0];
+
+  // Ownership check: patients see only their own, doctors see only their assigned cases
+  if (user.role === "patient" && analysis.patient_id !== user.id) {
+    const err = new Error("Access denied");
+    err.status = 403;
+    throw err;
+  }
+
+  if (user.role === "doctor") {
+    const appointmentCheck = await pool.query(
+      `SELECT 1 FROM appointment WHERE analysis_id = $1 AND medical_syndicate_id_card = $2`,
+      [analysisId, user.id]
+    );
+    if (appointmentCheck.rows.length === 0) {
+      const err = new Error("Access denied");
+      err.status = 403;
+      throw err;
+    }
+  }
+
   return {
     success: true,
-    data: result.rows[0]
+    data: analysis
   };
 };
 

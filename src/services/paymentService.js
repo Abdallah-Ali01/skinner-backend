@@ -1,24 +1,23 @@
 const pool = require("../config/database");
 const { v4: uuidv4 } = require("uuid");
 
-exports.payAppointment = async (data) => {
+exports.payAppointment = async (patientId, data) => {
   const {
     appointment_id,
     method,
     card_holder_name,
-    card_last4,
-    amount
+    card_last4
   } = data;
 
-  if (!appointment_id || !method || !card_holder_name || !card_last4 || !amount) {
-    const err = new Error("appointment_id, method, card_holder_name, card_last4, and amount are required");
+  if (!appointment_id || !method || !card_holder_name || !card_last4) {
+    const err = new Error("appointment_id, method, card_holder_name, and card_last4 are required");
     err.status = 400;
     throw err;
   }
 
-  // Get appointment details (need patient_id and doctor_id for chat creation)
+  // Get appointment details — amount comes from total_cost (set from doctor's consultation_fee)
   const appointmentResult = await pool.query(
-    `SELECT appointment_id, patient_id, medical_syndicate_id_card, status
+    `SELECT appointment_id, patient_id, medical_syndicate_id_card, status, total_cost
      FROM appointment WHERE appointment_id = $1`,
     [appointment_id]
   );
@@ -30,6 +29,13 @@ exports.payAppointment = async (data) => {
   }
 
   const appointment = appointmentResult.rows[0];
+  const amount = appointment.total_cost;
+
+  if (appointment.patient_id !== patientId) {
+    const err = new Error("This appointment does not belong to you");
+    err.status = 403;
+    throw err;
+  }
 
   if (appointment.status !== "pending_payment") {
     const err = new Error("Appointment is not in pending_payment status");
@@ -52,7 +58,7 @@ exports.payAppointment = async (data) => {
   const chatId = uuidv4();
   const transactionReference = `TXN-${Date.now()}`;
 
-  // Insert payment
+  // Insert payment — amount is from appointment.total_cost, NOT from client
   await pool.query(
     `
     INSERT INTO payment
@@ -90,11 +96,12 @@ exports.payAppointment = async (data) => {
   };
 };
 
-exports.getPaymentByAppointmentId = async (appointmentId) => {
+exports.getPaymentByAppointmentId = async (appointmentId, user) => {
   const result = await pool.query(
     `
-    SELECT p.*, c.chat_id
+    SELECT p.*, c.chat_id, a.patient_id, a.medical_syndicate_id_card
     FROM payment p
+    JOIN appointment a ON p.appointment_id = a.appointment_id
     LEFT JOIN chat c ON p.appointment_id = c.appointment_id
     WHERE p.appointment_id = $1
     `,
@@ -107,9 +114,23 @@ exports.getPaymentByAppointmentId = async (appointmentId) => {
     throw err;
   }
 
+  const payment = result.rows[0];
+
+  // Ownership check: patient can see own, doctor can see assigned, admin can see all
+  if (user.role === "patient" && payment.patient_id !== user.id) {
+    const err = new Error("Access denied");
+    err.status = 403;
+    throw err;
+  }
+  if (user.role === "doctor" && payment.medical_syndicate_id_card !== user.id) {
+    const err = new Error("Access denied");
+    err.status = 403;
+    throw err;
+  }
+
   return {
     success: true,
-    data: result.rows[0]
+    data: payment
   };
 };
 
