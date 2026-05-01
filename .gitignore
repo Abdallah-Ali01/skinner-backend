@@ -4,7 +4,6 @@ src/uploads
 ai/venv
 ai/__pycache__
 **/.ipynb_checkpoints
-ai/my_model.keras
 *.log
 dist
 build
