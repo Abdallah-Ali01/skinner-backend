@@ -3,7 +3,10 @@ node_modules
 src/uploads
 ai/venv
 ai/__pycache__
+chat-bot/src/venv
+chat-bot/src/__pycache__
 **/.ipynb_checkpoints
+**/__pycache__
 *.log
 dist
 build
