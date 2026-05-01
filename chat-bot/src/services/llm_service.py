@@ -1,6 +1,4 @@
-import os
 import logging
-from langchain_huggingface import HuggingFaceEmbeddings
 from typing import List
 import cohere
 from config import get_settings
@@ -74,23 +72,3 @@ class CohereProvider:
             return None
 
 
-class HuggingFaceProvider:
-    def __init__(self, model_name: str = settings.EMBEDDING_MODEL_ID):
-        self.model = HuggingFaceEmbeddings(
-            model_name=model_name,
-            model_kwargs={"device": "cpu"},
-            encode_kwargs={"normalize_embeddings": True}
-        )
-        self.logger = logging.getLogger(__name__)
-
-    def embed_text(self, text: str, document_type: str = "query"):
-        try:
-            # E5 requirement: Queries MUST start with "query: "
-            if document_type == "query":
-                processed_text = f"query: {text}"
-                return self.model.embed_query(processed_text)
-            else:
-                return self.model.embed_documents([text])[0]
-        except Exception as e:
-            self.logger.error("HuggingFace embedding error: %s", e)
-            return None

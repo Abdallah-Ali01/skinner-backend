@@ -9,20 +9,20 @@ router = APIRouter()
 
 @router.get("/health", response_model=HealthResponse)
 def health_check(request: Request):
-    rag_service = getattr(request.app.state, "rag_service", None)
+    chat_service = getattr(request.app.state, "chat_service", None)
     return {
         "status": "ok",
-        "message": "Skin disease RAG API is running",
-        "rag_service_ready": rag_service is not None
+        "message": "Skin disease chat API is running",
+        "chat_service_ready": chat_service is not None
     }
 
 
 @router.post("/chat", response_model=ChatResponse)
 def chat(chat_data: ChatRequest, request: Request):
-    rag_service = getattr(request.app.state, "rag_service", None)
+    chat_service = getattr(request.app.state, "chat_service", None)
 
-    if rag_service is None:
-        logger.error("RAG service not initialized")
+    if chat_service is None:
+        logger.error("Chat service not initialized")
         raise HTTPException(
             status_code=503, 
             detail="Service not ready. Check that data files exist and models loaded."
@@ -33,15 +33,13 @@ def chat(chat_data: ChatRequest, request: Request):
             [msg.model_dump() for msg in chat_data.chat_history]
         )
 
-        result = rag_service.answer(
+        result = chat_service.answer(
             query=chat_data.query,
             chat_history=history,
         )
 
         return {
             "answer": result["answer"],
-            "sources": result["sources"],
-            "query": result["query"],
         }
 
     except Exception as e:

@@ -20,13 +20,14 @@ exports.getPendingCases = async (doctorId) => {
       an.treatment_suggestion,
       an.doctor_recommendation,
       an.created_at AS analysis_date,
-      c.chat_id,
+      c.chat_id, c.status AS chat_status,
       pay.payment_status
     FROM appointment a
     JOIN patient p ON a.patient_id = p.patient_id
     JOIN analysis an ON a.analysis_id = an.analysis_id
     JOIN payment pay ON a.appointment_id = pay.appointment_id
-    LEFT JOIN chat c ON a.appointment_id = c.appointment_id
+    LEFT JOIN chat c ON a.patient_id = c.patient_id
+      AND a.medical_syndicate_id_card = c.medical_syndicate_id_card
     LEFT JOIN report r ON a.appointment_id = r.appointment_id
     WHERE a.medical_syndicate_id_card = $1
       AND pay.payment_status = 'paid'
@@ -52,12 +53,13 @@ exports.getReviewedCases = async (doctorId) => {
       r.diagnosis,
       r.created_at AS date,
       a.analysis_id,
-      c.chat_id
+      c.chat_id, c.status AS chat_status
     FROM report r
     JOIN appointment a ON r.appointment_id = a.appointment_id
     JOIN patient p ON r.patient_id = p.patient_id
     JOIN doctor d ON r.medical_syndicate_id_card = d.medical_syndicate_id_card
-    LEFT JOIN chat c ON a.appointment_id = c.appointment_id
+    LEFT JOIN chat c ON a.patient_id = c.patient_id
+      AND a.medical_syndicate_id_card = c.medical_syndicate_id_card
     WHERE r.medical_syndicate_id_card = $1
     ORDER BY r.created_at DESC
   `, [doctorId]);
@@ -89,13 +91,14 @@ exports.getCaseDetails = async (doctorId, appointmentId) => {
       an.treatment_suggestion,
       an.doctor_recommendation,
       an.created_at AS analysis_date,
-      c.chat_id,
+      c.chat_id, c.status AS chat_status,
       pay.payment_status
     FROM appointment a
     JOIN patient p ON a.patient_id = p.patient_id
     JOIN analysis an ON a.analysis_id = an.analysis_id
     JOIN payment pay ON a.appointment_id = pay.appointment_id
-    LEFT JOIN chat c ON a.appointment_id = c.appointment_id
+    LEFT JOIN chat c ON a.patient_id = c.patient_id
+      AND a.medical_syndicate_id_card = c.medical_syndicate_id_card
     WHERE a.medical_syndicate_id_card = $1
       AND a.appointment_id = $2
       AND pay.payment_status = 'paid'
@@ -181,6 +184,32 @@ exports.reviewCase = async (doctorId, data) => {
     `UPDATE appointment SET status = 'completed' WHERE appointment_id = $1`,
     [appointment_id]
   );
+
+  // Auto-message + lock chat after report submission
+  const chatResult = await pool.query(
+    `SELECT chat_id FROM chat WHERE patient_id = $1 AND medical_syndicate_id_card = $2`,
+    [caseData.patient_id, medical_syndicate_id_card]
+  );
+
+  if (chatResult.rows.length > 0) {
+    const chatId = chatResult.rows[0].chat_id;
+
+    // Send auto-generated report summary to chat
+    const autoMessageId = uuidv4();
+    const autoText = `📋 Report submitted:\n\nDiagnosis: ${diagnosis}${prescription ? `\nPrescription: ${prescription}` : ''}${notes ? `\nNotes: ${notes}` : ''}`;
+
+    await pool.query(
+      `INSERT INTO chat_message (message_id, chat_id, sender_role, sender_id, message_text, message_type, sent_at)
+       VALUES ($1, $2, 'system', $3, $4, 'system', NOW())`,
+      [autoMessageId, chatId, medical_syndicate_id_card, autoText]
+    );
+
+    // Lock the chat — patient can still read but can't send until new appointment
+    await pool.query(
+      `UPDATE chat SET status = 'locked', updated_at = NOW() WHERE chat_id = $1`,
+      [chatId]
+    );
+  }
 
   return {
     success: true,

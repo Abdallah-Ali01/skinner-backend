@@ -20,8 +20,21 @@ const { errorHandler } = require("./middlewares/errorMiddleware");
 const path = require("path");
 const app = express();
 
+// Allow multiple origins (local dev + production frontend)
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.BASE_URL
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL,
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, true); // Allow all for now on free tier
+  },
   credentials: true
 }));
 app.use(helmet());
@@ -33,6 +46,11 @@ app.get("/", (req, res) => {
   res.json({
     message: "SKINNER backend is running"
   });
+});
+
+// Health check endpoint for keep-alive pings
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 app.get("/db-test", async (req, res) => {

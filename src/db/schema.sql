@@ -122,14 +122,20 @@ CREATE TABLE IF NOT EXISTS payment (
 );
 
 -- =========================================
--- CHAT (real messaging, created after payment)
+-- CHAT (persistent 1-to-1 doctor↔patient channel)
+-- One chat per doctor-patient pair, reused across appointments.
+-- Status: 'active' = can send messages, 'locked' = read-only (after report)
 -- =========================================
 CREATE TABLE IF NOT EXISTS chat (
     chat_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    appointment_id UUID NOT NULL UNIQUE REFERENCES appointment(appointment_id) ON DELETE CASCADE,
+    appointment_id UUID REFERENCES appointment(appointment_id) ON DELETE SET NULL,
     patient_id UUID NOT NULL REFERENCES patient(patient_id) ON DELETE CASCADE,
     medical_syndicate_id_card VARCHAR(100) NOT NULL REFERENCES doctor(medical_syndicate_id_card) ON DELETE CASCADE,
-    created_at TIMESTAMP DEFAULT NOW()
+    status VARCHAR(10) NOT NULL DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT chat_status_check CHECK (status IN ('active', 'locked')),
+    CONSTRAINT unique_patient_doctor_chat UNIQUE (patient_id, medical_syndicate_id_card)
 );
 
 -- =========================================
@@ -146,7 +152,9 @@ CREATE TABLE IF NOT EXISTS chat_message (
     original_filename TEXT,
     sent_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT chat_message_sender_role_check
-        CHECK (sender_role IN ('patient', 'doctor'))
+        CHECK (sender_role IN ('patient', 'doctor', 'system')),
+    CONSTRAINT chat_message_type_check
+        CHECK (message_type IN ('text', 'image', 'file', 'system'))
 );
 
 -- =========================================

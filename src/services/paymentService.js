@@ -55,7 +55,6 @@ exports.payAppointment = async (patientId, data) => {
   }
 
   const paymentId = uuidv4();
-  const chatId = uuidv4();
   const transactionReference = `TXN-${Date.now()}`;
 
   // Insert payment — amount is from appointment.total_cost, NOT from client
@@ -74,14 +73,29 @@ exports.payAppointment = async (patientId, data) => {
     [appointment_id]
   );
 
-  // Create chat room between patient and doctor
-  await pool.query(
-    `
-    INSERT INTO chat (chat_id, appointment_id, patient_id, medical_syndicate_id_card, created_at)
-    VALUES ($1, $2, $3, $4, NOW())
-    `,
-    [chatId, appointment_id, appointment.patient_id, appointment.medical_syndicate_id_card]
+  // Find or create chat — reuse existing channel for same doctor+patient pair
+  const existingChat = await pool.query(
+    `SELECT chat_id FROM chat WHERE patient_id = $1 AND medical_syndicate_id_card = $2`,
+    [appointment.patient_id, appointment.medical_syndicate_id_card]
   );
+
+  let chatId;
+  if (existingChat.rows.length > 0) {
+    // Reactivate existing chat channel
+    chatId = existingChat.rows[0].chat_id;
+    await pool.query(
+      `UPDATE chat SET status = 'active', appointment_id = $1, updated_at = NOW() WHERE chat_id = $2`,
+      [appointment_id, chatId]
+    );
+  } else {
+    // Create new chat channel
+    chatId = uuidv4();
+    await pool.query(
+      `INSERT INTO chat (chat_id, appointment_id, patient_id, medical_syndicate_id_card, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, 'active', NOW(), NOW())`,
+      [chatId, appointment_id, appointment.patient_id, appointment.medical_syndicate_id_card]
+    );
+  }
 
   return {
     success: true,
@@ -99,10 +113,11 @@ exports.payAppointment = async (patientId, data) => {
 exports.getPaymentByAppointmentId = async (appointmentId, user) => {
   const result = await pool.query(
     `
-    SELECT p.*, c.chat_id, a.patient_id, a.medical_syndicate_id_card
+    SELECT p.*, c.chat_id, c.status AS chat_status, a.patient_id, a.medical_syndicate_id_card
     FROM payment p
     JOIN appointment a ON p.appointment_id = a.appointment_id
-    LEFT JOIN chat c ON p.appointment_id = c.appointment_id
+    LEFT JOIN chat c ON a.patient_id = c.patient_id
+      AND a.medical_syndicate_id_card = c.medical_syndicate_id_card
     WHERE p.appointment_id = $1
     `,
     [appointmentId]
@@ -151,10 +166,11 @@ exports.getPatientPayments = async (patientId) => {
       a.doctor_name,
       a.date AS appointment_date,
       a.status AS appointment_status,
-      c.chat_id
+      c.chat_id, c.status AS chat_status
     FROM payment p
     JOIN appointment a ON p.appointment_id = a.appointment_id
-    LEFT JOIN chat c ON a.appointment_id = c.appointment_id
+    LEFT JOIN chat c ON a.patient_id = c.patient_id
+      AND a.medical_syndicate_id_card = c.medical_syndicate_id_card
     WHERE a.patient_id = $1
     ORDER BY p.transaction_date DESC
     `,

@@ -7,9 +7,56 @@ const upload = require("../middlewares/uploadMiddleware");
 
 /**
  * @swagger
+ * /api/chat/my-chats:
+ *   get:
+ *     summary: Get all chat channels for the logged-in user
+ *     description: >
+ *       Returns all persistent 1-to-1 chat channels.
+ *       Each channel includes status (active/locked), the other party's name, and a last message preview.
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of chat channels
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 count:
+ *                   type: integer
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       chat_id:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                         enum: [active, locked]
+ *                       doctor_name:
+ *                         type: string
+ *                       last_message:
+ *                         type: object
+ *       500:
+ *         description: Server error
+ */
+router.get(
+  "/my-chats",
+  verifyToken,
+  allowRoles("patient", "doctor"),
+  chatController.getMyChats
+);
+
+/**
+ * @swagger
  * /api/chat/access/{chatId}:
  *   get:
- *     summary: Check chat access (patient or doctor)
+ *     summary: Check chat access and status (patient or doctor)
  *     tags: [Chat]
  *     security:
  *       - bearerAuth: []
@@ -21,7 +68,7 @@ const upload = require("../middlewares/uploadMiddleware");
  *           type: string
  *     responses:
  *       200:
- *         description: Access result successfully retrieved
+ *         description: Access result with chat status (active/locked)
  *       403:
  *         description: Forbidden - No access to this chat
  *       500:
@@ -39,6 +86,9 @@ router.get(
  * /api/chat/send:
  *   post:
  *     summary: Send a chat message (Text or File)
+ *     description: >
+ *       Sends a message to a chat channel. Will be rejected with 403 if the chat is locked.
+ *       Chat becomes locked after the doctor submits a report. Book a new appointment to reopen.
  *     tags: [Chat]
  *     security:
  *       - bearerAuth: []
@@ -65,7 +115,7 @@ router.get(
  *       201:
  *         description: Message sent successfully
  *       403:
- *         description: Forbidden - Payment required
+ *         description: Forbidden - Chat is locked or access denied
  *       500:
  *         description: Server error
  */
@@ -82,6 +132,9 @@ router.post(
  * /api/chat/messages/{chatId}:
  *   get:
  *     summary: Get all messages for a chat (authorized)
+ *     description: >
+ *       Returns all messages including system messages (auto-generated report summaries).
+ *       Response includes chat_status so the frontend knows if messaging is enabled.
  *     tags: [Chat]
  *     security:
  *       - bearerAuth: []
@@ -93,7 +146,7 @@ router.post(
  *           type: string
  *     responses:
  *       200:
- *         description: List of chat messages
+ *         description: List of chat messages with chat_status field
  *       403:
  *         description: Access denied
  *       500:

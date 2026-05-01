@@ -20,10 +20,18 @@ exports.sendMessage = async (req, res) => {
       return res.status(400).json({ success: false, message: "chat_id is required" });
     }
 
-    // Access check — only allow if payment is confirmed
+    // Access check — only allow if user belongs to this chat
     const access = await chatService.checkAccess(chat_id, req.user.id, req.user.role);
     if (!access.allowed) {
       return res.status(403).json({ success: false, message: "Access denied or payment required" });
+    }
+
+    // Lock check — reject sends to locked chats
+    if (access.status === 'locked') {
+      return res.status(403).json({
+        success: false,
+        message: "Chat is locked. Book a new appointment with this doctor to reopen."
+      });
     }
 
     let file_url = null;
@@ -66,7 +74,16 @@ exports.getMessagesByChatId = async (req, res) => {
     }
 
     const messages = await chatService.getMessagesByChatId(chatId);
-    res.status(200).json({ success: true, data: messages });
+    res.status(200).json({ success: true, data: messages, chat_status: access.status });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.getMyChats = async (req, res) => {
+  try {
+    const result = await chatService.getMyChats(req.user.id, req.user.role);
+    res.status(200).json(result);
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

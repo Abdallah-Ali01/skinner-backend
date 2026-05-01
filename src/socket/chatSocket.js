@@ -22,7 +22,7 @@ module.exports = (io) => {
           return socket.emit("chat_error", { message: "Access denied or payment required" });
         }
         socket.join(chat_id);
-        socket.emit("joined_chat", { chat_id });
+        socket.emit("joined_chat", { chat_id, status: access.status });
       } catch (error) {
         socket.emit("chat_error", { message: error.message });
       }
@@ -30,9 +30,16 @@ module.exports = (io) => {
 
     socket.on("send_message", async ({ chat_id, message_text }) => {
       try {
-        // التحقق قبل الحفظ
+        // Access + status check before saving
         const access = await chatService.checkAccess(chat_id, socket.user.id, socket.user.role);
         if (!access.allowed) return socket.emit("chat_error", { message: "Unauthorized" });
+
+        // Block sends to locked chats
+        if (access.status === 'locked') {
+          return socket.emit("chat_error", {
+            message: "Chat is locked. Book a new appointment to reopen."
+          });
+        }
 
         const message = await chatService.saveMessage({
           chat_id,

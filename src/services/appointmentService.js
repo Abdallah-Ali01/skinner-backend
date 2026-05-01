@@ -177,10 +177,11 @@ exports.getMyAppointments = async (userId, role) => {
         a.appointment_id, a.patient_id, a.doctor_name, a.total_cost,
         a.date, a.status, a.medical_syndicate_id_card, a.analysis_id,
         an.skin_disease_classification, an.skin_image_upload,
-        c.chat_id
+        c.chat_id, c.status AS chat_status
       FROM appointment a
       LEFT JOIN analysis an ON a.analysis_id = an.analysis_id
-      LEFT JOIN chat c ON a.appointment_id = c.appointment_id
+      LEFT JOIN chat c ON a.patient_id = c.patient_id
+        AND a.medical_syndicate_id_card = c.medical_syndicate_id_card
       WHERE a.patient_id = $1
       ORDER BY a.date DESC`;
   } else if (role === "doctor") {
@@ -190,11 +191,12 @@ exports.getMyAppointments = async (userId, role) => {
         a.date, a.status, a.medical_syndicate_id_card, a.analysis_id,
         p.name AS patient_name, p.email AS patient_email,
         an.skin_disease_classification, an.skin_image_upload,
-        c.chat_id
+        c.chat_id, c.status AS chat_status
       FROM appointment a
       LEFT JOIN patient p ON a.patient_id = p.patient_id
       LEFT JOIN analysis an ON a.analysis_id = an.analysis_id
-      LEFT JOIN chat c ON a.appointment_id = c.appointment_id
+      LEFT JOIN chat c ON a.patient_id = c.patient_id
+        AND a.medical_syndicate_id_card = c.medical_syndicate_id_card
       WHERE a.medical_syndicate_id_card = $1
       ORDER BY a.date DESC`;
   } else {
@@ -226,12 +228,13 @@ exports.getMyReports = async (patientId) => {
       a.date AS appointment_date,
       an.skin_disease_classification,
       an.skin_image_upload,
-      c.chat_id
+      c.chat_id, c.status AS chat_status
     FROM report r
     JOIN appointment a ON r.appointment_id = a.appointment_id
     JOIN doctor d ON r.medical_syndicate_id_card = d.medical_syndicate_id_card
     JOIN analysis an ON a.analysis_id = an.analysis_id
-    LEFT JOIN chat c ON a.appointment_id = c.appointment_id
+    LEFT JOIN chat c ON a.patient_id = c.patient_id
+      AND a.medical_syndicate_id_card = c.medical_syndicate_id_card
     WHERE r.patient_id = $1
     ORDER BY r.created_at DESC
   `, [patientId]);
@@ -262,13 +265,14 @@ exports.getReportByAppointmentId = async (appointmentId, user) => {
       an.skin_image_upload,
       an.analysis,
       an.treatment_suggestion,
-      c.chat_id
+      c.chat_id, c.status AS chat_status
     FROM report r
     JOIN appointment a ON r.appointment_id = a.appointment_id
     JOIN doctor d ON r.medical_syndicate_id_card = d.medical_syndicate_id_card
     JOIN patient p ON r.patient_id = p.patient_id
     JOIN analysis an ON a.analysis_id = an.analysis_id
-    LEFT JOIN chat c ON a.appointment_id = c.appointment_id
+    LEFT JOIN chat c ON a.patient_id = c.patient_id
+      AND a.medical_syndicate_id_card = c.medical_syndicate_id_card
     WHERE r.appointment_id = $1
   `, [appointmentId]);
 
