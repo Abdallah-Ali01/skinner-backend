@@ -5,33 +5,38 @@ from PIL import Image
 import io
 import tensorflow as tf
 
-import os
-
 # =====================
 # CONFIG (مطابق للنوتبوك)
 # =====================
-_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(_DIR, "my_model.keras")
-IMG_SIZE = 384   # نفس النوتبوك
+MODEL_PATH = "my_model.keras"
+IMG_SIZE = 224   # نفس النوتبوك
 TOP_K = 3
 
 # ✋ مهم جداً
 # حطي هنا نفس train_ds.class_names بالظبط من النوتبوك
 CLASS_NAMES = [
-    "Actinic keratoses",
-    "Basal cell carcinoma",
-    "Benign keratosis-like lesions",
-    "Chickenpox",
-    "Cowpox",
-    "Dermatofibroma",
-    "HFMD",                 # ⚠️ تأكدي من الترتيب من النوتبوك
-    "Healthy",
-    "Measles",
-    "Melanocytic nevi",
-    "Melanoma",
-    "Monkeypox",
-    "Squamous cell carcinoma",
-    "Vascular lesions",
+    "Acne",
+    "Actinic_Keratosis",
+    "Benign_tumors",
+    "Bullous",
+    "Candidiasis",
+    "DrugEruption",
+    "Eczema",
+    "Infestations_Bites",
+    "Lichen",
+    "Lupus",
+    "Moles",
+    "Psoriasis",
+    "Rosacea",
+    "Seborrh_Keratoses",
+    "SkinCancer",
+    "Sun_Sunlight_Damage",
+    "Tinea",
+    "Unknown_Normal",
+    "Vascular_Tumors",
+    "Vasculitis",
+    "Vitiligo",
+    "Warts"
 ]
 
 app = FastAPI(title="Skin Disease AI API", version="2.0.0")
