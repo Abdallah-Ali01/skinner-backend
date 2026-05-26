@@ -23,8 +23,6 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global llm_service
-
     logger.info("Starting up...")
 
     try:
@@ -60,4 +58,4 @@ app.include_router(router, prefix="/api/v1")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)
+    uvicorn.run("src.main:app", host="0.0.0.0", port=8000, reload=True)

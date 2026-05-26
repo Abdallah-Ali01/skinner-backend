@@ -24,3 +24,4 @@ class ChatResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     message: str
+    chat_service_ready: bool = False
