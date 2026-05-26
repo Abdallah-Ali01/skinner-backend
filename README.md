@@ -30,6 +30,7 @@ Patient → Upload Image
 
 - Authentication (Patient / Doctor / Admin)
 - AI Skin Disease Detection
+- AI Chat Bot
 - Doctor Appointment Booking
 - Online Payment
 - Real-time Chat (WebSocket)
@@ -44,6 +45,9 @@ Patient → Upload Image
 ```text
 skinner-backend
 ├── ai/                # AI service (FastAPI + TensorFlow model)
+├── chat-bot/          # AI Chat Bot service
+│   ├── data/          # Chat Bot training data
+│   └── src/           # Chat Bot source code
 ├── src/
 │   ├── config/        # Database config & Swagger setup
 │   ├── controllers/   # API controllers (handle requests)
@@ -54,7 +58,6 @@ skinner-backend
 │   ├── socket/        # WebSocket real-time chat
 │   ├── uploads/       # Uploaded images storage
 │   └── utils/         # Utility/helper functions
-├── app.js             # Express application configuration
 ├── server.js          # Application entry point
 ├── test-socket.js     # WebSocket testing script
 ├── package.json       # Project dependencies
@@ -97,5 +100,9 @@ Run `schema.sql` to initialize the database.
 
 ## Contributors
 
-- Abdallah Tako
-- Mahmoud Samir
+| Name | Role |
+|------|------|
+| Abdallah Tako | Backend |
+| Mahmoud Samir | Backend |
+| Mariz Atef | AI |
+| Eman Elsayed | Chat Bot |
