@@ -10,3 +10,4 @@ chat-bot/src/__pycache__
 *.log
 dist
 build
+DEPLOYMENT.md
