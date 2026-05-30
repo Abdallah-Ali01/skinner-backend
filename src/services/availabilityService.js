@@ -35,6 +35,14 @@ exports.setAvailability = async (doctorId, schedule) => {
     }
   }
 
+  // Check for duplicate day_of_week entries
+  const days = schedule.map((e) => e.day_of_week);
+  if (new Set(days).size !== days.length) {
+    const err = new Error("Duplicate day_of_week entries are not allowed");
+    err.status = 400;
+    throw err;
+  }
+
   // Delete existing schedule and insert new one (transactional)
   const client = await pool.connect();
   try {
