@@ -1,125 +1,144 @@
+import os
+import numpy as np
+import tensorflow as tf
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import numpy as np
+from pydantic import BaseModel
 from PIL import Image
 import io
-import tensorflow as tf
+import uvicorn
 
-# =====================
-# CONFIG (مطابق للنوتبوك)
-# =====================
-MODEL_PATH = "my_model.keras"
-IMG_SIZE = 224   # نفس النوتبوك
-TOP_K = 3
+# ─────────────────────────────────────────────
+# Config
+# ─────────────────────────────────────────────
 
-# ✋ مهم جداً
-# حطي هنا نفس train_ds.class_names بالظبط من النوتبوك
-CLASS_NAMES = [
+MODEL_PATH = os.getenv("MODEL_PATH", "my_model.keras")
+IMG_SIZE = 384
+
+CLASSES = [
     "Acne",
     "Actinic_Keratosis",
-    "Benign_tumors",
     "Bullous",
-    "Candidiasis",
     "DrugEruption",
     "Eczema",
-    "Infestations_Bites",
     "Lichen",
     "Lupus",
-    "Moles",
-    "Psoriasis",
     "Rosacea",
     "Seborrh_Keratoses",
     "SkinCancer",
-    "Sun_Sunlight_Damage",
     "Tinea",
     "Unknown_Normal",
-    "Vascular_Tumors",
     "Vasculitis",
     "Vitiligo",
-    "Warts"
+    "Warts",
 ]
 
-app = FastAPI(title="Skin Disease AI API", version="2.0.0")
+# ─────────────────────────────────────────────
+# App
+# ─────────────────────────────────────────────
+
+app = FastAPI(
+    title="Skin Disease Classifier API",
+    description="Upload a skin image and get a diagnosis prediction using EfficientNetV2S.",
+    version="1.0.0",
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Load model
-try:
+# ─────────────────────────────────────────────
+# Load model on startup
+# ─────────────────────────────────────────────
+
+model: tf.keras.Model = None
+
+
+@app.on_event("startup")
+def load_model():
+    global model
+    if not os.path.exists(MODEL_PATH):
+        raise RuntimeError(f"Model not found at: {MODEL_PATH}")
     model = tf.keras.models.load_model(MODEL_PATH)
-except Exception as e:
-    model = None
-    print("❌ Failed to load model:", e)
+    print(f"✅ Model loaded from {MODEL_PATH}")
 
 
-# =====================
-# PREPROCESS (مطابق للتدريب)
-# =====================
+# ─────────────────────────────────────────────
+# Schemas
+# ─────────────────────────────────────────────
+
+
+class Prediction(BaseModel):
+    predicted_class: str
+    confidence: float
+    probabilities: dict[str, float]
+
+
+# ─────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────
+
+
 def preprocess_image(image_bytes: bytes) -> np.ndarray:
     try:
         img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid image file")
+        raise HTTPException(status_code=400, detail="Invalid image file.")
 
     img = img.resize((IMG_SIZE, IMG_SIZE))
-    arr = np.array(img).astype(np.float32)
-
-    # نفس اللي استخدمتيه في التدريب
-    arr = tf.keras.applications.efficientnet.preprocess_input(arr)
-
+    arr = np.array(img, dtype=np.float32)
     arr = np.expand_dims(arr, axis=0)
     return arr
 
+# ─────────────────────────────────────────────
+# Routes
+# ─────────────────────────────────────────────
 
-@app.get("/health")
-def health():
-    return {"status": "ok", "model_loaded": model is not None}
+
+@app.get("/", summary="Health check")
+def root():
+    return {"status": "ok", "message": "Skin Disease Classifier API is running."}
 
 
-@app.post("/predict")
-async def predict(image: UploadFile = File(...)):
-    if model is None:
-        raise HTTPException(status_code=500, detail="Model not loaded")
+@app.get("/classes", summary="List all supported disease classes")
+def get_classes():
+    return {"classes": CLASSES, "total": len(CLASSES)}
 
-    if image.content_type not in [
-        "image/jpeg",
-        "image/png",
-        "image/jpg",
-        "image/webp"
-    ]:
-        raise HTTPException(status_code=400, detail="Unsupported image type")
 
-    image_bytes = await image.read()
-    x = preprocess_image(image_bytes)
-
-    preds = model.predict(x)
-    probs = preds[0].astype(float)
-
-    if len(CLASS_NAMES) != probs.shape[0]:
+@app.post("/predict", response_model=Prediction, summary="Classify a skin image")
+async def predict(file: UploadFile = File(...)):
+    """
+    Upload a skin image (JPG / PNG) and receive:
+    - **predicted_class**: the most likely disease
+    - **confidence**: probability score (0–1)
+    - **probabilities**: scores for all 15 classes
+    """
+    # Validate content type
+    if file.content_type not in ("image/jpeg", "image/png", "image/jpg"):
         raise HTTPException(
-            status_code=500,
-            detail="CLASS_NAMES does not match model output size"
+            status_code=415,
+            detail=f"Unsupported file type '{file.content_type}'. Use JPEG or PNG.",
         )
 
-    top1_idx = int(np.argmax(probs))
-    top1_conf = float(probs[top1_idx])
+    image_bytes = await file.read()
+    tensor = preprocess_image(image_bytes)
 
-    topk_idx = np.argsort(probs)[::-1][:TOP_K]
-    top_k = [
-        {
-            "label": CLASS_NAMES[int(i)],
-            "confidence": float(probs[int(i)])
-        }
-        for i in topk_idx
-    ]
+    preds = model.predict(tensor, verbose=0)[0]          # shape: (15,)
+    top_idx = int(np.argmax(preds))
 
-    return {
-        "predicted_class": CLASS_NAMES[top1_idx],
-        "confidence": top1_conf,
-        "top_k": top_k,
-    }
+    return Prediction(
+        predicted_class=CLASSES[top_idx],
+        confidence=round(float(preds[top_idx]), 4),
+        probabilities={cls: round(float(prob), 4) for cls, prob in zip(CLASSES, preds)},
+    )
+
+
+# ─────────────────────────────────────────────
+# Run
+# ─────────────────────────────────────────────
+
+if __name__ == "__main__":
+    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=False)
