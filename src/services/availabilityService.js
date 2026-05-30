@@ -119,8 +119,8 @@ exports.getAvailableSlots = async (doctorId, dateStr) => {
     throw err;
   }
 
-  // Get the day of week (JS: 0=Sunday, 1=Monday, ... 6=Saturday)
-  const dayOfWeek = targetDate.getDay();
+  // Get the day of week in UTC (JS: 0=Sunday, 1=Monday, ... 6=Saturday)
+  const dayOfWeek = targetDate.getUTCDay();
 
   // Get doctor's schedule for this day
   const scheduleResult = await pool.query(
@@ -228,11 +228,11 @@ exports.getAvailableDates = async (doctorId, days = 7) => {
   for (let i = 0; i < days; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() + i);
-    if (activeDays.has(d.getDay())) {
+    if (activeDays.has(d.getUTCDay())) {
       availableDates.push({
         date: d.toISOString().split("T")[0],
-        day_of_week: d.getDay(),
-        day_name: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.getDay()]
+        day_of_week: d.getUTCDay(),
+        day_name: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.getUTCDay()]
       });
     }
   }
