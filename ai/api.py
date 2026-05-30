@@ -1,4 +1,5 @@
 import os
+from typing import List
 import numpy as np
 import tensorflow as tf
 from fastapi import FastAPI, File, UploadFile, HTTPException
@@ -71,9 +72,15 @@ def load_model():
 # ─────────────────────────────────────────────
 
 
+class TopKItem(BaseModel):
+    label: str
+    confidence: float
+
+
 class Prediction(BaseModel):
     predicted_class: str
     confidence: float
+    top_k: List[TopKItem]
     probabilities: dict[str, float]
 
 
@@ -127,11 +134,17 @@ async def predict(file: UploadFile = File(...)):
     tensor = preprocess_image(image_bytes)
 
     preds = model.predict(tensor, verbose=0)[0]          # shape: (15,)
-    top_idx = int(np.argmax(preds))
+    top_indices = np.argsort(preds)[::-1][:3]             # top 3
+
+    top_k = [
+        TopKItem(label=CLASSES[int(i)], confidence=round(float(preds[int(i)]), 4))
+        for i in top_indices
+    ]
 
     return Prediction(
-        predicted_class=CLASSES[top_idx],
-        confidence=round(float(preds[top_idx]), 4),
+        predicted_class=CLASSES[int(top_indices[0])],
+        confidence=round(float(preds[int(top_indices[0])]), 4),
+        top_k=top_k,
         probabilities={cls: round(float(prob), 4) for cls, prob in zip(CLASSES, preds)},
     )
 
