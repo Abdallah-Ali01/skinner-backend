@@ -4,7 +4,7 @@ const fs = require("fs");
 
 exports.predictImage = async (imagePath) => {
   const form = new FormData();
-  form.append("image", fs.createReadStream(imagePath));
+  form.append("file", fs.createReadStream(imagePath));
 
   const response = await axios.post(
     `${process.env.AI_SERVICE_URL}/predict`,
