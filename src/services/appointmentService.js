@@ -139,7 +139,6 @@ exports.bookAppointment = async (patientId, data) => {
   }
 
   // Check for double-booking on same doctor + date + time
-  const dateStr = appointmentDate.toISOString().split("T")[0];
   const conflictCheck = await pool.query(
     `SELECT 1 FROM appointment
      WHERE medical_syndicate_id_card = $1
