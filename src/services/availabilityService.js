@@ -35,14 +35,6 @@ exports.setAvailability = async (doctorId, schedule) => {
     }
   }
 
-  // Check for duplicate day_of_week entries
-  const days = schedule.map((e) => e.day_of_week);
-  if (new Set(days).size !== days.length) {
-    const err = new Error("Duplicate day_of_week entries are not allowed");
-    err.status = 400;
-    throw err;
-  }
-
   // Delete existing schedule and insert new one (transactional)
   const client = await pool.connect();
   try {
@@ -138,7 +130,10 @@ exports.getAvailableSlots = async (doctorId, dateStr) => {
     [doctorId, dayOfWeek]
   );
 
-  if (scheduleResult.rows.length === 0 || !scheduleResult.rows[0].is_active) {
+  // Filter to only active schedule entries
+  const activeSchedules = scheduleResult.rows.filter((r) => r.is_active);
+
+  if (activeSchedules.length === 0) {
     return {
       success: true,
       date: dateStr,
@@ -149,22 +144,27 @@ exports.getAvailableSlots = async (doctorId, dateStr) => {
     };
   }
 
-  const schedule = scheduleResult.rows[0];
-  const slotDuration = schedule.slot_duration_minutes;
-
-  // Generate all time slots
+  // Generate time slots from ALL schedule entries for this day
   const slots = [];
-  const [startH, startM] = schedule.start_time.split(":").map(Number);
-  const [endH, endM] = schedule.end_time.split(":").map(Number);
-  const startMinutes = startH * 60 + startM;
-  const endMinutes = endH * 60 + endM;
+  let primarySlotDuration = activeSchedules[0].slot_duration_minutes;
 
-  for (let m = startMinutes; m + slotDuration <= endMinutes; m += slotDuration) {
-    const hours = Math.floor(m / 60);
-    const mins = m % 60;
-    const timeStr = `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
-    slots.push(timeStr);
+  for (const schedule of activeSchedules) {
+    const slotDuration = schedule.slot_duration_minutes;
+    const [startH, startM] = schedule.start_time.split(":").map(Number);
+    const [endH, endM] = schedule.end_time.split(":").map(Number);
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
+
+    for (let m = startMinutes; m + slotDuration <= endMinutes; m += slotDuration) {
+      const hours = Math.floor(m / 60);
+      const mins = m % 60;
+      const timeStr = `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+      slots.push(timeStr);
+    }
   }
+
+  // Remove duplicates and sort
+  const uniqueSlots = [...new Set(slots)].sort();
 
   // Get all booked appointments for this doctor on this date
   const bookedResult = await pool.query(
@@ -189,7 +189,7 @@ exports.getAvailableSlots = async (doctorId, dateStr) => {
   const today = now.toISOString().split("T")[0];
   const isToday = dateStr === today;
 
-  const result = slots.map((time) => {
+  const result = uniqueSlots.map((time) => {
     let status = "available";
 
     if (bookedTimes.has(time)) {
@@ -211,7 +211,7 @@ exports.getAvailableSlots = async (doctorId, dateStr) => {
     date: dateStr,
     day_of_week: dayOfWeek,
     available: true,
-    slot_duration_minutes: slotDuration,
+    slot_duration_minutes: primarySlotDuration,
     slots: result
   };
 };

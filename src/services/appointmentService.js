@@ -89,34 +89,39 @@ exports.bookAppointment = async (patientId, data) => {
     [medical_syndicate_id_card, dayOfWeek]
   );
 
-  if (availResult.rows.length === 0 || !availResult.rows[0].is_active) {
+  const activeSchedules = availResult.rows.filter((r) => r.is_active);
+
+  if (activeSchedules.length === 0) {
     const err = new Error("Doctor is not available on this day");
     err.status = 400;
     throw err;
   }
 
-  const schedule = availResult.rows[0];
   const appointmentTimeStr = `${String(appointmentDate.getUTCHours()).padStart(2, "0")}:${String(appointmentDate.getUTCMinutes()).padStart(2, "0")}`;
-
-  // Validate time is within doctor's working hours
-  const [startH, startM] = schedule.start_time.split(":").map(Number);
-  const [endH, endM] = schedule.end_time.split(":").map(Number);
-  const scheduleStart = startH * 60 + startM;
-  const scheduleEnd = endH * 60 + endM;
-  const slotDuration = schedule.slot_duration_minutes;
-
   const [apptH, apptM] = appointmentTimeStr.split(":").map(Number);
   const apptMinutes = apptH * 60 + apptM;
 
-  if (apptMinutes < scheduleStart || apptMinutes + slotDuration > scheduleEnd) {
-    const err = new Error("Selected time is outside the doctor's working hours");
-    err.status = 400;
-    throw err;
+  // Validate time fits within ANY of the doctor's time ranges for this day
+  let matchedSchedule = null;
+  for (const schedule of activeSchedules) {
+    const [startH, startM] = schedule.start_time.split(":").map(Number);
+    const [endH, endM] = schedule.end_time.split(":").map(Number);
+    const scheduleStart = startH * 60 + startM;
+    const scheduleEnd = endH * 60 + endM;
+    const slotDuration = schedule.slot_duration_minutes;
+
+    if (
+      apptMinutes >= scheduleStart &&
+      apptMinutes + slotDuration <= scheduleEnd &&
+      (apptMinutes - scheduleStart) % slotDuration === 0
+    ) {
+      matchedSchedule = schedule;
+      break;
+    }
   }
 
-  // Validate time aligns with slot boundaries
-  if ((apptMinutes - scheduleStart) % slotDuration !== 0) {
-    const err = new Error("Selected time does not align with available time slots");
+  if (!matchedSchedule) {
+    const err = new Error("Selected time is outside the doctor's working hours or does not align with available time slots");
     err.status = 400;
     throw err;
   }

@@ -198,6 +198,5 @@ CREATE TABLE IF NOT EXISTS doctor_availability (
     slot_duration_minutes INT NOT NULL DEFAULT 30,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     CONSTRAINT day_of_week_check CHECK (day_of_week >= 0 AND day_of_week <= 6),
-    CONSTRAINT slot_duration_check CHECK (slot_duration_minutes > 0 AND slot_duration_minutes <= 120),
-    CONSTRAINT unique_doctor_day UNIQUE (medical_syndicate_id_card, day_of_week)
+    CONSTRAINT slot_duration_check CHECK (slot_duration_minutes > 0 AND slot_duration_minutes <= 120)
 );
