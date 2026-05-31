@@ -80,16 +80,28 @@ exports.bookAppointment = async (patientId, data) => {
   }
 
   const dayOfWeek = appointmentDate.getUTCDay();
+  const dateStr = appointmentDate.toISOString().split("T")[0];
 
-  // Check doctor has availability for this day
-  const availResult = await pool.query(
+  // Check date-specific availability first, then fall back to weekly
+  const dateAvailResult = await pool.query(
     `SELECT start_time, end_time, slot_duration_minutes, is_active
-     FROM doctor_availability
-     WHERE medical_syndicate_id_card = $1 AND day_of_week = $2`,
-    [medical_syndicate_id_card, dayOfWeek]
+     FROM doctor_date_availability
+     WHERE medical_syndicate_id_card = $1 AND available_date = $2`,
+    [medical_syndicate_id_card, dateStr]
   );
 
-  const activeSchedules = availResult.rows.filter((r) => r.is_active);
+  let activeSchedules;
+  if (dateAvailResult.rows.length > 0) {
+    activeSchedules = dateAvailResult.rows.filter((r) => r.is_active);
+  } else {
+    const availResult = await pool.query(
+      `SELECT start_time, end_time, slot_duration_minutes, is_active
+       FROM doctor_availability
+       WHERE medical_syndicate_id_card = $1 AND day_of_week = $2`,
+      [medical_syndicate_id_card, dayOfWeek]
+    );
+    activeSchedules = availResult.rows.filter((r) => r.is_active);
+  }
 
   if (activeSchedules.length === 0) {
     const err = new Error("Doctor is not available on this day");
