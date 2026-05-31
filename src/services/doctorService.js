@@ -73,11 +73,6 @@ exports.getReviewedCases = async (doctorId) => {
 };
 
 exports.getCaseDetails = async (doctorId, appointmentId) => {
-  if (!validateUuid(appointmentId)) {
-    const err = new Error("Case not found or not allowed");
-    err.status = 404;
-    throw err;
-  }
 
   const result = await pool.query(`
     SELECT
@@ -139,11 +134,6 @@ exports.reviewCase = async (doctorId, data) => {
     throw err;
   }
 
-  if (!validateUuid(appointment_id)) {
-    const err = new Error("Invalid appointment_id format (must be a valid UUID)");
-    err.status = 400;
-    throw err;
-  }
 
   // Verify this is a paid appointment assigned to this doctor
   const caseResult = await pool.query(`
