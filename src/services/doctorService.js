@@ -1,5 +1,5 @@
 const pool = require("../config/database");
-const { v4: uuidv4 } = require("uuid");
+const { v4: uuidv4, validate: validateUuid } = require("uuid");
 
 exports.getPendingCases = async (doctorId) => {
   const result = await pool.query(`
@@ -72,6 +72,12 @@ exports.getReviewedCases = async (doctorId) => {
 };
 
 exports.getCaseDetails = async (doctorId, appointmentId) => {
+  if (!validateUuid(appointmentId)) {
+    const err = new Error("Case not found or not allowed");
+    err.status = 404;
+    throw err;
+  }
+
   const result = await pool.query(`
     SELECT
       a.appointment_id,
@@ -128,6 +134,12 @@ exports.reviewCase = async (doctorId, data) => {
 
   if (!appointment_id || !diagnosis) {
     const err = new Error("appointment_id and diagnosis are required");
+    err.status = 400;
+    throw err;
+  }
+
+  if (!validateUuid(appointment_id)) {
+    const err = new Error("Invalid appointment_id format (must be a valid UUID)");
     err.status = 400;
     throw err;
   }
