@@ -110,67 +110,6 @@ router.post("/review-case", verifyToken, allowRoles("doctor"), doctorController.
 
 const availabilityController = require("../controllers/availabilityController");
 
-/**
- * @swagger
- * /api/doctor/availability:
- *   put:
- *     summary: Set or update the doctor's weekly availability schedule
- *     tags: [Doctor]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - schedule
- *             properties:
- *               schedule:
- *                 type: array
- *                 items:
- *                   type: object
- *                   required:
- *                     - day_of_week
- *                     - start_time
- *                     - end_time
- *                   properties:
- *                     day_of_week:
- *                       type: integer
- *                       description: "0=Sunday, 1=Monday, ... 6=Saturday"
- *                       example: 6
- *                     start_time:
- *                       type: string
- *                       example: "08:30"
- *                     end_time:
- *                       type: string
- *                       example: "16:30"
- *                     slot_duration_minutes:
- *                       type: integer
- *                       example: 30
- *                     is_active:
- *                       type: boolean
- *                       example: true
- *     responses:
- *       200:
- *         description: Availability updated successfully
- */
-router.put("/availability", verifyToken, allowRoles("doctor"), availabilityController.setAvailability);
-
-/**
- * @swagger
- * /api/doctor/availability:
- *   get:
- *     summary: Get the doctor's own weekly availability schedule
- *     tags: [Doctor]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Doctor's weekly schedule
- */
-router.get("/availability", verifyToken, allowRoles("doctor"), availabilityController.getMyAvailability);
 
 /**
  * @swagger
@@ -198,21 +137,16 @@ router.get("/availability", verifyToken, allowRoles("doctor"), availabilityContr
  *                 type: array
  *                 items:
  *                   type: object
+ *                   required:
+ *                     - start_time
+ *                     - end_time
  *                   properties:
  *                     start_time:
  *                       type: string
  *                       example: "09:00"
  *                     end_time:
  *                       type: string
- *                       example: "12:00"
- *                     slot_duration_minutes:
- *                       type: integer
- *                       example: 30
- *                     is_active:
- *                       type: boolean
- *                       description: "Set to false to override the weekly schedule and mark this date as unavailable (day off). Defaults to true."
- *                       default: true
- *                       example: true
+ *                       example: "09:30"
  *     responses:
  *       200:
  *         description: Date availability saved

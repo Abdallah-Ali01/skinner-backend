@@ -1,109 +1,9 @@
 const pool = require("../config/database");
-const { v4: uuidv4 } = require("uuid");
-
-/**
- * Set or replace a doctor's full weekly schedule.
- * Accepts an array of day configs, e.g.:
- * [
- *   { day_of_week: 0, start_time: "08:30", end_time: "16:30", slot_duration_minutes: 30 },
- *   { day_of_week: 1, start_time: "09:00", end_time: "15:00", slot_duration_minutes: 30 }
- * ]
- */
-exports.setAvailability = async (doctorId, schedule) => {
-  if (!Array.isArray(schedule) || schedule.length === 0) {
-    const err = new Error("schedule must be a non-empty array");
-    err.status = 400;
-    throw err;
-  }
-
-  // Validate each entry
-  for (const entry of schedule) {
-    if (
-      entry.day_of_week === undefined ||
-      !entry.start_time ||
-      !entry.end_time
-    ) {
-      const err = new Error("Each schedule entry requires day_of_week, start_time, and end_time");
-      err.status = 400;
-      throw err;
-    }
-
-    if (entry.day_of_week < 0 || entry.day_of_week > 6) {
-      const err = new Error("day_of_week must be 0 (Sunday) to 6 (Saturday)");
-      err.status = 400;
-      throw err;
-    }
-  }
-
-  // Delete existing schedule and insert new one (transactional)
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-
-    await client.query(
-      `DELETE FROM doctor_availability WHERE medical_syndicate_id_card = $1`,
-      [doctorId]
-    );
-
-    for (const entry of schedule) {
-      await client.query(
-        `INSERT INTO doctor_availability
-         (availability_id, medical_syndicate_id_card, day_of_week, start_time, end_time, slot_duration_minutes, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          uuidv4(),
-          doctorId,
-          entry.day_of_week,
-          entry.start_time,
-          entry.end_time,
-          entry.slot_duration_minutes || 30,
-          entry.is_active !== undefined ? entry.is_active : true
-        ]
-      );
-    }
-
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
-  } finally {
-    client.release();
-  }
-
-  return {
-    success: true,
-    message: "Availability schedule updated successfully",
-    data: schedule
-  };
-};
-
-/**
- * Get a doctor's full weekly schedule.
- */
-exports.getAvailability = async (doctorId) => {
-  const result = await pool.query(
-    `SELECT
-      availability_id,
-      day_of_week,
-      start_time,
-      end_time,
-      slot_duration_minutes,
-      is_active
-    FROM doctor_availability
-    WHERE medical_syndicate_id_card = $1
-    ORDER BY day_of_week ASC`,
-    [doctorId]
-  );
-
-  return {
-    success: true,
-    data: result.rows
-  };
-};
 
 /**
  * Get available time slots for a doctor on a specific date.
- * Generates all possible slots from schedule, then marks booked ones as "reserved".
+ * Each row in doctor_date_availability represents a single bookable slot.
+ * Marks slots as reserved (booked) or unavailable (past).
  */
 exports.getAvailableSlots = async (doctorId, dateStr) => {
   if (!dateStr) {
@@ -112,42 +12,25 @@ exports.getAvailableSlots = async (doctorId, dateStr) => {
     throw err;
   }
 
-  const targetDate = new Date(dateStr);
+  const targetDate = new Date(dateStr + "T00:00:00Z");
   if (isNaN(targetDate.getTime())) {
     const err = new Error("Invalid date format. Use YYYY-MM-DD");
     err.status = 400;
     throw err;
   }
 
-  // Get the day of week in UTC (JS: 0=Sunday, 1=Monday, ... 6=Saturday)
   const dayOfWeek = targetDate.getUTCDay();
 
-  // First check for date-specific availability (overrides weekly)
-  const dateResult = await pool.query(
-    `SELECT start_time, end_time, slot_duration_minutes, is_active
+  // Get date-specific slots
+  const result = await pool.query(
+    `SELECT start_time, end_time
      FROM doctor_date_availability
-     WHERE medical_syndicate_id_card = $1 AND available_date = $2`,
+     WHERE medical_syndicate_id_card = $1 AND available_date = $2
+     ORDER BY start_time ASC`,
     [doctorId, dateStr]
   );
 
-  const dateSpecific = dateResult.rows.filter((r) => r.is_active);
-
-  // If date-specific entries exist, use those exclusively
-  let activeSchedules;
-  if (dateResult.rows.length > 0) {
-    activeSchedules = dateSpecific;
-  } else {
-    // Fall back to weekly schedule
-    const scheduleResult = await pool.query(
-      `SELECT start_time, end_time, slot_duration_minutes, is_active
-       FROM doctor_availability
-       WHERE medical_syndicate_id_card = $1 AND day_of_week = $2`,
-      [doctorId, dayOfWeek]
-    );
-    activeSchedules = scheduleResult.rows.filter((r) => r.is_active);
-  }
-
-  if (activeSchedules.length === 0) {
+  if (result.rows.length === 0) {
     return {
       success: true,
       date: dateStr,
@@ -158,29 +41,13 @@ exports.getAvailableSlots = async (doctorId, dateStr) => {
     };
   }
 
-  // Generate time slots from ALL schedule entries for this day
-  const slots = [];
-  let primarySlotDuration = activeSchedules[0].slot_duration_minutes;
+  // Calculate slot duration from the first entry
+  const firstRow = result.rows[0];
+  const [sH, sM] = firstRow.start_time.split(":").map(Number);
+  const [eH, eM] = firstRow.end_time.split(":").map(Number);
+  const slotDuration = (eH * 60 + eM) - (sH * 60 + sM);
 
-  for (const schedule of activeSchedules) {
-    const slotDuration = schedule.slot_duration_minutes;
-    const [startH, startM] = schedule.start_time.split(":").map(Number);
-    const [endH, endM] = schedule.end_time.split(":").map(Number);
-    const startMinutes = startH * 60 + startM;
-    const endMinutes = endH * 60 + endM;
-
-    for (let m = startMinutes; m + slotDuration <= endMinutes; m += slotDuration) {
-      const hours = Math.floor(m / 60);
-      const mins = m % 60;
-      const timeStr = `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
-      slots.push(timeStr);
-    }
-  }
-
-  // Remove duplicates and sort
-  const uniqueSlots = [...new Set(slots)].sort();
-
-  // Get all booked appointments for this doctor on this date
+  // Get booked appointments for this doctor on this date
   const bookedResult = await pool.query(
     `SELECT date FROM appointment
      WHERE medical_syndicate_id_card = $1
@@ -198,10 +65,11 @@ exports.getAvailableSlots = async (doctorId, dateStr) => {
     })
   );
 
-  // Check if slot is in the past (always compare in UTC — no isToday guard needed)
   const now = new Date();
 
-  const result = uniqueSlots.map((time) => {
+  const slots = result.rows.map((row) => {
+    // PostgreSQL TIME may return "HH:MM:SS", extract "HH:MM"
+    const time = row.start_time.substring(0, 5);
     let status = "available";
 
     if (bookedTimes.has(time)) {
@@ -223,27 +91,16 @@ exports.getAvailableSlots = async (doctorId, dateStr) => {
     date: dateStr,
     day_of_week: dayOfWeek,
     available: true,
-    slot_duration_minutes: primarySlotDuration,
-    slots: result
+    slot_duration_minutes: slotDuration,
+    slots
   };
 };
 
 /**
  * Get available dates for a doctor in the next N days.
- * Returns dates where the doctor has active availability set.
- * Date-specific entries override the weekly schedule for that date —
- * if all date-specific entries are inactive, the day is treated as unavailable.
+ * Only considers dates with entries in doctor_date_availability.
  */
 exports.getAvailableDates = async (doctorId, days = 7) => {
-  // Get doctor's active weekly days
-  const scheduleResult = await pool.query(
-    `SELECT day_of_week FROM doctor_availability
-     WHERE medical_syndicate_id_card = $1 AND is_active = TRUE
-     ORDER BY day_of_week ASC`,
-    [doctorId]
-  );
-
-  // Normalize to UTC start of day to avoid local-timezone drift
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   const todayStr = today.toISOString().split("T")[0];
@@ -252,10 +109,9 @@ exports.getAvailableDates = async (doctorId, days = 7) => {
   endDate.setUTCDate(endDate.getUTCDate() + days);
   const endDateStr = endDate.toISOString().split("T")[0];
 
-  // Get ALL date-specific entries (both active AND inactive) in the range
-  // so we know which dates have overrides — even overrides that turn the day off
-  const allDateResult = await pool.query(
-    `SELECT available_date, is_active FROM doctor_date_availability
+  const result = await pool.query(
+    `SELECT DISTINCT available_date
+     FROM doctor_date_availability
      WHERE medical_syndicate_id_card = $1
        AND available_date >= $2::date
        AND available_date < $3::date
@@ -263,43 +119,14 @@ exports.getAvailableDates = async (doctorId, days = 7) => {
     [doctorId, todayStr, endDateStr]
   );
 
-  // Map: date string → true if at least one active entry exists
-  const dateOverrides = new Map();
-  for (const row of allDateResult.rows) {
-    const dStr = new Date(row.available_date).toISOString().split("T")[0];
-    if (!dateOverrides.has(dStr)) {
-      dateOverrides.set(dStr, false);
-    }
-    if (row.is_active) {
-      dateOverrides.set(dStr, true);
-    }
-  }
-
-  const activeDays = new Set(scheduleResult.rows.map((r) => r.day_of_week));
-  const availableDates = [];
-
-  for (let i = 0; i < days; i++) {
-    const d = new Date(today);
-    d.setUTCDate(d.getUTCDate() + i);
-    const dStr = d.toISOString().split("T")[0];
-
-    let isAvailable;
-    if (dateOverrides.has(dStr)) {
-      // Date-specific entries exist — they override the weekly schedule entirely
-      isAvailable = dateOverrides.get(dStr);
-    } else {
-      // No override — fall back to weekly schedule
-      isAvailable = activeDays.has(d.getUTCDay());
-    }
-
-    if (isAvailable) {
-      availableDates.push({
-        date: dStr,
-        day_of_week: d.getUTCDay(),
-        day_name: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.getUTCDay()]
-      });
-    }
-  }
+  const availableDates = result.rows.map((row) => {
+    const d = new Date(row.available_date);
+    return {
+      date: d.toISOString().split("T")[0],
+      day_of_week: d.getUTCDay(),
+      day_name: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.getUTCDay()]
+    };
+  });
 
   return {
     success: true,
@@ -312,8 +139,8 @@ exports.getAvailableDates = async (doctorId, days = 7) => {
 
 /**
  * Set or replace time slots for a specific date.
- * Accepts: doctorId, dateStr (YYYY-MM-DD), slots array
- * Each slot can include is_active: false to override the weekly schedule as a day off.
+ * Each slot represents a single bookable time window (e.g. 09:00–09:30).
+ * Validates: no past dates, start_time < end_time, no overlapping slots.
  */
 exports.setDateAvailability = async (doctorId, dateStr, slots) => {
   if (!dateStr) {
@@ -342,9 +169,32 @@ exports.setDateAvailability = async (doctorId, dateStr, slots) => {
     err.status = 400;
     throw err;
   }
+
+  // Validate each slot: required fields + start < end
   for (const s of slots) {
     if (!s.start_time || !s.end_time) {
       const err = new Error("Each slot requires start_time and end_time");
+      err.status = 400;
+      throw err;
+    }
+    const [startH, startM] = s.start_time.split(":").map(Number);
+    const [endH, endM] = s.end_time.split(":").map(Number);
+    if (startH * 60 + startM >= endH * 60 + endM) {
+      const err = new Error(`start_time (${s.start_time}) must be before end_time (${s.end_time})`);
+      err.status = 400;
+      throw err;
+    }
+  }
+
+  // Check for overlapping slots
+  const sorted = [...slots].sort((a, b) => a.start_time.localeCompare(b.start_time));
+  for (let i = 1; i < sorted.length; i++) {
+    const prevEnd = sorted[i - 1].end_time;
+    const currStart = sorted[i].start_time;
+    if (currStart < prevEnd) {
+      const err = new Error(
+        `Overlapping slots: ${sorted[i - 1].start_time}-${prevEnd} and ${currStart}-${sorted[i].end_time}`
+      );
       err.status = 400;
       throw err;
     }
@@ -353,21 +203,28 @@ exports.setDateAvailability = async (doctorId, dateStr, slots) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
     // Remove existing entries for this doctor + date
     await client.query(
       `DELETE FROM doctor_date_availability
        WHERE medical_syndicate_id_card = $1 AND available_date = $2`,
       [doctorId, dateStr]
     );
+
     // Insert new slots
     for (const s of slots) {
+      const [startH, startM] = s.start_time.split(":").map(Number);
+      const [endH, endM] = s.end_time.split(":").map(Number);
+      const duration = (endH * 60 + endM) - (startH * 60 + startM);
+
       await client.query(
         `INSERT INTO doctor_date_availability
          (medical_syndicate_id_card, available_date, start_time, end_time, slot_duration_minutes, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [doctorId, dateStr, s.start_time, s.end_time, s.slot_duration_minutes || 30, s.is_active !== undefined ? s.is_active : true]
+         VALUES ($1, $2, $3, $4, $5, true)`,
+        [doctorId, dateStr, s.start_time, s.end_time, duration]
       );
     }
+
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -389,7 +246,7 @@ exports.getDateAvailability = async (doctorId, startDate, endDate) => {
     throw err;
   }
   const result = await pool.query(
-    `SELECT id, available_date, start_time, end_time, slot_duration_minutes, is_active
+    `SELECT id, available_date, start_time, end_time, slot_duration_minutes
      FROM doctor_date_availability
      WHERE medical_syndicate_id_card = $1
        AND available_date >= $2::date
