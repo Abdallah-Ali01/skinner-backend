@@ -33,6 +33,16 @@ exports.setDateAvailability = async (req, res) => {
     const result = await availabilityService.setDateAvailability(req.user.id, date, slots);
     res.status(200).json(result);
   } catch (error) {
+    // Handle 409 conflict with custom error structure
+    if (error.status === 409 && error.error === "BOOKED_SLOTS_CONFLICT") {
+      return res.status(409).json({
+        success: false,
+        error: error.error,
+        message: error.message,
+        conflicting_appointments: error.conflicting_appointments,
+        conflicting_slots: error.conflicting_slots
+      });
+    }
     res.status(error.status || 500).json({
       success: false,
       message: error.message
@@ -61,6 +71,15 @@ exports.removeDateAvailability = async (req, res) => {
     const result = await availabilityService.removeDateAvailability(req.user.id, req.params.date);
     res.status(200).json(result);
   } catch (error) {
+    // Handle 409 conflict with custom error structure
+    if (error.status === 409 && error.error === "BOOKED_SLOTS_CONFLICT") {
+      return res.status(409).json({
+        success: false,
+        error: error.error,
+        message: error.message,
+        conflicting_appointments: error.conflicting_appointments
+      });
+    }
     res.status(error.status || 500).json({
       success: false,
       message: error.message

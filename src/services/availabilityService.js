@@ -138,9 +138,31 @@ exports.getAvailableDates = async (doctorId, days = 7) => {
 // ─── Per-Date Availability ──────────────────────────────────────────────────
 
 /**
+ * Validate time format (HH:mm) strictly.
+ */
+function validateTimeFormat(timeStr, fieldName) {
+  const timeRegex = /^([01]\d|2[0-1]):([0-5]\d)$/;
+  if (!timeRegex.test(timeStr)) {
+    const err = new Error(`${fieldName} must be in HH:mm format (00:00 to 21:59). Got: ${timeStr}`);
+    err.status = 400;
+    throw err;
+  }
+}
+
+/**
+ * Parse time string to minutes since midnight.
+ */
+function parseTimeToMinutes(timeStr) {
+  const [h, m] = timeStr.split(":").map(Number);
+  return h * 60 + m;
+}
+
+/**
  * Set or replace time slots for a specific date.
  * Each slot represents a single bookable time window (e.g. 09:00–09:30).
- * Validates: no past dates, start_time < end_time, no overlapping slots.
+ * Validates: no past dates, working hours (09:00–21:00), slot duration (30 or 60 min),
+ * start_time < end_time, no overlapping slots, no booked slot removal.
+ * Empty slots array marks the date as a day-off.
  */
 exports.setDateAvailability = async (doctorId, dateStr, slots) => {
   if (!dateStr) {
@@ -164,29 +186,103 @@ exports.setDateAvailability = async (doctorId, dateStr, slots) => {
     throw err;
   }
 
-  if (!Array.isArray(slots) || slots.length === 0) {
-    const err = new Error("slots must be a non-empty array");
+  if (!Array.isArray(slots)) {
+    const err = new Error("slots must be an array");
     err.status = 400;
     throw err;
   }
 
-  // Validate each slot: required fields + start < end
+  // ── Handle day-off (empty slots array) ──
+  if (slots.length === 0) {
+    // Check for booked appointments before allowing day-off
+    const bookedAppointments = await pool.query(
+      `SELECT appointment_id, date 
+       FROM appointment 
+       WHERE medical_syndicate_id_card = $1 
+         AND date::date = $2::date 
+         AND status != 'cancelled'`,
+      [doctorId, dateStr]
+    );
+
+    if (bookedAppointments.rows.length > 0) {
+      const conflictingAppointments = bookedAppointments.rows.map((row) => {
+        const d = new Date(row.date);
+        const h = String(d.getUTCHours()).padStart(2, "0");
+        const m = String(d.getUTCMinutes()).padStart(2, "0");
+        return {
+          appointment_id: row.appointment_id,
+          time: `${h}:${m}`,
+          date: row.date
+        };
+      });
+
+      const err = new Error("Cannot mark day as unavailable: confirmed appointments exist");
+      err.status = 409;
+      err.error = "BOOKED_SLOTS_CONFLICT";
+      err.conflicting_appointments = conflictingAppointments;
+      throw err;
+    }
+
+    // No bookings — safe to delete all slots (mark as day-off)
+    await pool.query(
+      `DELETE FROM doctor_date_availability
+       WHERE medical_syndicate_id_card = $1 AND available_date = $2`,
+      [doctorId, dateStr]
+    );
+
+    return { success: true, message: `${dateStr} marked as day-off (unavailable)` };
+  }
+
+  // ── Validate each slot ──
+  const WORKING_START = 9 * 60;  // 09:00 in minutes
+  const WORKING_END = 21 * 60;   // 21:00 in minutes
+  const ALLOWED_DURATIONS = [30, 60];
+
   for (const s of slots) {
     if (!s.start_time || !s.end_time) {
       const err = new Error("Each slot requires start_time and end_time");
       err.status = 400;
       throw err;
     }
-    const [startH, startM] = s.start_time.split(":").map(Number);
-    const [endH, endM] = s.end_time.split(":").map(Number);
-    if (startH * 60 + startM >= endH * 60 + endM) {
+
+    // Validate time format
+    validateTimeFormat(s.start_time, "start_time");
+    validateTimeFormat(s.end_time, "end_time");
+
+    const startMinutes = parseTimeToMinutes(s.start_time);
+    const endMinutes = parseTimeToMinutes(s.end_time);
+
+    // start_time < end_time
+    if (startMinutes >= endMinutes) {
       const err = new Error(`start_time (${s.start_time}) must be before end_time (${s.end_time})`);
+      err.status = 400;
+      throw err;
+    }
+
+    // Working hours: 09:00 <= start and end <= 21:00
+    if (startMinutes < WORKING_START) {
+      const err = new Error(`start_time (${s.start_time}) is before working hours (09:00)`);
+      err.status = 400;
+      throw err;
+    }
+    if (endMinutes > WORKING_END) {
+      const err = new Error(`end_time (${s.end_time}) is after working hours (21:00)`);
+      err.status = 400;
+      throw err;
+    }
+
+    // Slot duration: exactly 30 or 60 minutes
+    const duration = endMinutes - startMinutes;
+    if (!ALLOWED_DURATIONS.includes(duration)) {
+      const err = new Error(
+        `Slot duration must be exactly 30 or 60 minutes. Got ${duration} minutes for ${s.start_time}-${s.end_time}`
+      );
       err.status = 400;
       throw err;
     }
   }
 
-  // Check for overlapping slots
+  // ── Check for overlapping slots ──
   const sorted = [...slots].sort((a, b) => a.start_time.localeCompare(b.start_time));
   for (let i = 1; i < sorted.length; i++) {
     const prevEnd = sorted[i - 1].end_time;
@@ -200,6 +296,89 @@ exports.setDateAvailability = async (doctorId, dateStr, slots) => {
     }
   }
 
+  // ── Check for booked slot conflicts (strict: full slot must match) ──
+  
+  // First, get existing slots to know the full slot definition for each booked appointment
+  const existingSlots = await pool.query(
+    `SELECT start_time, end_time, slot_duration_minutes
+     FROM doctor_date_availability
+     WHERE medical_syndicate_id_card = $1 AND available_date = $2
+     ORDER BY start_time ASC`,
+    [doctorId, dateStr]
+  );
+
+  // Get booked appointments
+  const bookedAppointments = await pool.query(
+    `SELECT appointment_id, date 
+     FROM appointment 
+     WHERE medical_syndicate_id_card = $1 
+       AND date::date = $2::date 
+       AND status != 'cancelled'`,
+    [doctorId, dateStr]
+  );
+
+  if (bookedAppointments.rows.length > 0 && existingSlots.rows.length > 0) {
+    // Map each booked appointment to its full slot definition
+    const lockedSlots = [];
+    
+    for (const apptRow of bookedAppointments.rows) {
+      const d = new Date(apptRow.date);
+      const h = String(d.getUTCHours()).padStart(2, "0");
+      const m = String(d.getUTCMinutes()).padStart(2, "0");
+      const bookedTime = `${h}:${m}`;
+
+      // Find the existing slot that contains this appointment
+      const matchingSlot = existingSlots.rows.find((slot) => {
+        // PostgreSQL TIME may return "HH:MM:SS", normalize to "HH:MM"
+        const slotStart = slot.start_time.substring(0, 5);
+        return slotStart === bookedTime;
+      });
+
+      if (matchingSlot) {
+        lockedSlots.push({
+          start_time: matchingSlot.start_time.substring(0, 5),
+          end_time: matchingSlot.end_time.substring(0, 5),
+          duration: matchingSlot.slot_duration_minutes,
+          appointment_id: apptRow.appointment_id,
+          appointment_date: apptRow.date
+        });
+      }
+    }
+
+    // Now check if all locked slots exist EXACTLY in the new slots array
+    const conflictingSlots = [];
+    
+    for (const locked of lockedSlots) {
+      const exactMatch = slots.find(
+        (s) => s.start_time === locked.start_time && s.end_time === locked.end_time
+      );
+
+      if (!exactMatch) {
+        conflictingSlots.push({
+          appointment_id: locked.appointment_id,
+          appointment_date: locked.appointment_date,
+          locked_slot: {
+            start_time: locked.start_time,
+            end_time: locked.end_time,
+            duration_minutes: locked.duration
+          },
+          reason: exactMatch === undefined 
+            ? "Slot removed or start_time changed" 
+            : "Slot duration or end_time changed"
+        });
+      }
+    }
+
+    if (conflictingSlots.length > 0) {
+      const err = new Error("Cannot modify or remove slots with confirmed bookings. Booked slots must remain exactly as defined.");
+      err.status = 409;
+      err.error = "BOOKED_SLOTS_CONFLICT";
+      err.conflicting_slots = conflictingSlots;
+      throw err;
+    }
+  }
+
+  // ── All validations passed — update availability ──
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -213,9 +392,9 @@ exports.setDateAvailability = async (doctorId, dateStr, slots) => {
 
     // Insert new slots
     for (const s of slots) {
-      const [startH, startM] = s.start_time.split(":").map(Number);
-      const [endH, endM] = s.end_time.split(":").map(Number);
-      const duration = (endH * 60 + endM) - (startH * 60 + startM);
+      const startMinutes = parseTimeToMinutes(s.start_time);
+      const endMinutes = parseTimeToMinutes(s.end_time);
+      const duration = endMinutes - startMinutes;
 
       await client.query(
         `INSERT INTO doctor_date_availability
@@ -259,6 +438,7 @@ exports.getDateAvailability = async (doctorId, startDate, endDate) => {
 
 /**
  * Remove all availability entries for a specific date.
+ * Validates: no past dates, no booked appointments.
  */
 exports.removeDateAvailability = async (doctorId, dateStr) => {
   if (!dateStr) {
@@ -266,10 +446,58 @@ exports.removeDateAvailability = async (doctorId, dateStr) => {
     err.status = 400;
     throw err;
   }
+
+  const d = new Date(dateStr + "T00:00:00Z");
+  if (isNaN(d.getTime())) {
+    const err = new Error("Invalid date format. Use YYYY-MM-DD");
+    err.status = 400;
+    throw err;
+  }
+
+  // Reject past dates
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  if (d < today) {
+    const err = new Error("Cannot remove availability for a past date");
+    err.status = 400;
+    throw err;
+  }
+
+  // Check for booked appointments
+  const bookedAppointments = await pool.query(
+    `SELECT appointment_id, date 
+     FROM appointment 
+     WHERE medical_syndicate_id_card = $1 
+       AND date::date = $2::date 
+       AND status != 'cancelled'`,
+    [doctorId, dateStr]
+  );
+
+  if (bookedAppointments.rows.length > 0) {
+    const conflictingAppointments = bookedAppointments.rows.map((row) => {
+      const d = new Date(row.date);
+      const h = String(d.getUTCHours()).padStart(2, "0");
+      const m = String(d.getUTCMinutes()).padStart(2, "0");
+      return {
+        appointment_id: row.appointment_id,
+        time: `${h}:${m}`,
+        date: row.date
+      };
+    });
+
+    const err = new Error("Cannot remove availability: confirmed appointments exist");
+    err.status = 409;
+    err.error = "BOOKED_SLOTS_CONFLICT";
+    err.conflicting_appointments = conflictingAppointments;
+    throw err;
+  }
+
+  // Safe to delete
   await pool.query(
     `DELETE FROM doctor_date_availability
      WHERE medical_syndicate_id_card = $1 AND available_date = $2`,
     [doctorId, dateStr]
   );
+
   return { success: true, message: `Availability for ${dateStr} removed` };
 };
