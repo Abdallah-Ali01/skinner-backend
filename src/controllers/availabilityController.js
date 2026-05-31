@@ -48,3 +48,46 @@ exports.getAvailableSlots = async (req, res) => {
     });
   }
 };
+
+// ─── Per-Date Availability ───────────────────────────────────────────────
+
+exports.setDateAvailability = async (req, res) => {
+  try {
+    const { date, slots } = req.body;
+    const result = await availabilityService.setDateAvailability(req.user.id, date, slots);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+exports.getDateAvailability = async (req, res) => {
+  try {
+    const result = await availabilityService.getDateAvailability(
+      req.user.id,
+      req.query.start_date,
+      req.query.end_date
+    );
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+exports.removeDateAvailability = async (req, res) => {
+  try {
+    const result = await availabilityService.removeDateAvailability(req.user.id, req.params.date);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};

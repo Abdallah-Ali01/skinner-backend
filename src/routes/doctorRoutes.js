@@ -172,4 +172,95 @@ router.put("/availability", verifyToken, allowRoles("doctor"), availabilityContr
  */
 router.get("/availability", verifyToken, allowRoles("doctor"), availabilityController.getMyAvailability);
 
+/**
+ * @swagger
+ * /api/doctor/date-availability:
+ *   put:
+ *     summary: Set or replace time slots for a specific date
+ *     tags: [Doctor]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - date
+ *               - slots
+ *             properties:
+ *               date:
+ *                 type: string
+ *                 format: date
+ *                 example: "2026-06-03"
+ *               slots:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     start_time:
+ *                       type: string
+ *                       example: "09:00"
+ *                     end_time:
+ *                       type: string
+ *                       example: "12:00"
+ *                     slot_duration_minutes:
+ *                       type: integer
+ *                       example: 30
+ *     responses:
+ *       200:
+ *         description: Date availability saved
+ */
+router.put("/date-availability", verifyToken, allowRoles("doctor"), availabilityController.setDateAvailability);
+
+/**
+ * @swagger
+ * /api/doctor/date-availability:
+ *   get:
+ *     summary: Get the doctor's date-specific availability for a date range
+ *     tags: [Doctor]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: start_date
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: end_date
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Date-specific availability entries
+ */
+router.get("/date-availability", verifyToken, allowRoles("doctor"), availabilityController.getDateAvailability);
+
+/**
+ * @swagger
+ * /api/doctor/date-availability/{date}:
+ *   delete:
+ *     summary: Remove all availability for a specific date
+ *     tags: [Doctor]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: date
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         example: "2026-06-03"
+ *     responses:
+ *       200:
+ *         description: Date availability removed
+ */
+router.delete("/date-availability/:date", verifyToken, allowRoles("doctor"), availabilityController.removeDateAvailability);
+
 module.exports = router;
