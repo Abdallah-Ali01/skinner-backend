@@ -198,17 +198,15 @@ exports.getAvailableSlots = async (doctorId, dateStr) => {
     })
   );
 
-  // Check if slot is in the past
+  // Check if slot is in the past (always compare in UTC — no isToday guard needed)
   const now = new Date();
-  const today = now.toISOString().split("T")[0];
-  const isToday = dateStr === today;
 
   const result = uniqueSlots.map((time) => {
     let status = "available";
 
     if (bookedTimes.has(time)) {
       status = "reserved";
-    } else if (isToday) {
+    } else {
       const [slotH, slotM] = time.split(":").map(Number);
       const slotDate = new Date(targetDate);
       slotDate.setUTCHours(slotH, slotM, 0, 0);
@@ -233,6 +231,8 @@ exports.getAvailableSlots = async (doctorId, dateStr) => {
 /**
  * Get available dates for a doctor in the next N days.
  * Returns dates where the doctor has active availability set.
+ * Date-specific entries override the weekly schedule for that date —
+ * if all date-specific entries are inactive, the day is treated as unavailable.
  */
 exports.getAvailableDates = async (doctorId, days = 7) => {
   // Get doctor's active weekly days
@@ -243,34 +243,56 @@ exports.getAvailableDates = async (doctorId, days = 7) => {
     [doctorId]
   );
 
+  // Normalize to UTC start of day to avoid local-timezone drift
   const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const todayStr = today.toISOString().split("T")[0];
 
-  // Also get date-specific availability in the range
   const endDate = new Date(today);
-  endDate.setDate(endDate.getDate() + days);
-  const dateResult = await pool.query(
-    `SELECT DISTINCT available_date FROM doctor_date_availability
+  endDate.setUTCDate(endDate.getUTCDate() + days);
+  const endDateStr = endDate.toISOString().split("T")[0];
+
+  // Get ALL date-specific entries (both active AND inactive) in the range
+  // so we know which dates have overrides — even overrides that turn the day off
+  const allDateResult = await pool.query(
+    `SELECT available_date, is_active FROM doctor_date_availability
      WHERE medical_syndicate_id_card = $1
-       AND is_active = TRUE
        AND available_date >= $2::date
        AND available_date < $3::date
      ORDER BY available_date ASC`,
-    [doctorId, today.toISOString().split("T")[0], endDate.toISOString().split("T")[0]]
+    [doctorId, todayStr, endDateStr]
   );
 
-  const dateSpecificDates = new Set(
-    dateResult.rows.map((r) => new Date(r.available_date).toISOString().split("T")[0])
-  );
+  // Map: date string → true if at least one active entry exists
+  const dateOverrides = new Map();
+  for (const row of allDateResult.rows) {
+    const dStr = new Date(row.available_date).toISOString().split("T")[0];
+    if (!dateOverrides.has(dStr)) {
+      dateOverrides.set(dStr, false);
+    }
+    if (row.is_active) {
+      dateOverrides.set(dStr, true);
+    }
+  }
 
   const activeDays = new Set(scheduleResult.rows.map((r) => r.day_of_week));
   const availableDates = [];
 
   for (let i = 0; i < days; i++) {
     const d = new Date(today);
-    d.setDate(d.getDate() + i);
+    d.setUTCDate(d.getUTCDate() + i);
     const dStr = d.toISOString().split("T")[0];
-    // Include if date-specific entry exists OR weekly schedule covers this day
-    if (dateSpecificDates.has(dStr) || activeDays.has(d.getUTCDay())) {
+
+    let isAvailable;
+    if (dateOverrides.has(dStr)) {
+      // Date-specific entries exist — they override the weekly schedule entirely
+      isAvailable = dateOverrides.get(dStr);
+    } else {
+      // No override — fall back to weekly schedule
+      isAvailable = activeDays.has(d.getUTCDay());
+    }
+
+    if (isAvailable) {
       availableDates.push({
         date: dStr,
         day_of_week: d.getUTCDay(),
@@ -291,6 +313,7 @@ exports.getAvailableDates = async (doctorId, days = 7) => {
 /**
  * Set or replace time slots for a specific date.
  * Accepts: doctorId, dateStr (YYYY-MM-DD), slots array
+ * Each slot can include is_active: false to override the weekly schedule as a day off.
  */
 exports.setDateAvailability = async (doctorId, dateStr, slots) => {
   if (!dateStr) {
@@ -298,12 +321,22 @@ exports.setDateAvailability = async (doctorId, dateStr, slots) => {
     err.status = 400;
     throw err;
   }
-  const d = new Date(dateStr);
+  const d = new Date(dateStr + "T00:00:00Z");
   if (isNaN(d.getTime())) {
     const err = new Error("Invalid date format. Use YYYY-MM-DD");
     err.status = 400;
     throw err;
   }
+
+  // Reject past dates (UTC comparison)
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  if (d < today) {
+    const err = new Error("Cannot set availability for a past date");
+    err.status = 400;
+    throw err;
+  }
+
   if (!Array.isArray(slots) || slots.length === 0) {
     const err = new Error("slots must be a non-empty array");
     err.status = 400;
@@ -332,7 +365,7 @@ exports.setDateAvailability = async (doctorId, dateStr, slots) => {
         `INSERT INTO doctor_date_availability
          (medical_syndicate_id_card, available_date, start_time, end_time, slot_duration_minutes, is_active)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [doctorId, dateStr, s.start_time, s.end_time, s.slot_duration_minutes || 30, true]
+        [doctorId, dateStr, s.start_time, s.end_time, s.slot_duration_minutes || 30, s.is_active !== undefined ? s.is_active : true]
       );
     }
     await client.query("COMMIT");

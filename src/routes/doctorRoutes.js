@@ -208,6 +208,11 @@ router.get("/availability", verifyToken, allowRoles("doctor"), availabilityContr
  *                     slot_duration_minutes:
  *                       type: integer
  *                       example: 30
+ *                     is_active:
+ *                       type: boolean
+ *                       description: "Set to false to override the weekly schedule and mark this date as unavailable (day off). Defaults to true."
+ *                       default: true
+ *                       example: true
  *     responses:
  *       200:
  *         description: Date availability saved
