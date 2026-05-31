@@ -128,14 +128,45 @@ exports.reviewCase = async (doctorId, data) => {
 
   const medical_syndicate_id_card = doctorId;
 
+  // --- Input validation ---
   if (!appointment_id || !diagnosis) {
     const err = new Error("appointment_id and diagnosis are required");
     err.status = 400;
     throw err;
   }
 
+  if (!validateUuid(appointment_id)) {
+    const err = new Error("Invalid appointment_id format");
+    err.status = 400;
+    throw err;
+  }
 
-  // Verify this is a paid appointment assigned to this doctor
+  const MAX_DIAGNOSIS_LENGTH = 5000;
+  const MAX_PRESCRIPTION_LENGTH = 3000;
+  const MAX_NOTES_LENGTH = 3000;
+
+  if (typeof diagnosis !== 'string' || diagnosis.trim().length === 0) {
+    const err = new Error("diagnosis must be a non-empty string");
+    err.status = 400;
+    throw err;
+  }
+  if (diagnosis.length > MAX_DIAGNOSIS_LENGTH) {
+    const err = new Error(`diagnosis must not exceed ${MAX_DIAGNOSIS_LENGTH} characters`);
+    err.status = 400;
+    throw err;
+  }
+  if (prescription && typeof prescription === 'string' && prescription.length > MAX_PRESCRIPTION_LENGTH) {
+    const err = new Error(`prescription must not exceed ${MAX_PRESCRIPTION_LENGTH} characters`);
+    err.status = 400;
+    throw err;
+  }
+  if (notes && typeof notes === 'string' && notes.length > MAX_NOTES_LENGTH) {
+    const err = new Error(`notes must not exceed ${MAX_NOTES_LENGTH} characters`);
+    err.status = 400;
+    throw err;
+  }
+
+  // --- Verify this is a paid appointment assigned to this doctor ---
   const caseResult = await pool.query(`
     SELECT
       a.appointment_id,
@@ -165,62 +196,83 @@ exports.reviewCase = async (doctorId, data) => {
     throw err;
   }
 
-  const reportId = uuidv4();
-  const caseData = caseResult.rows[0];
+  // --- Use a transaction for all mutations ---
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  await pool.query(`
-    INSERT INTO report
-    (report_id, appointment_id, patient_id, medical_syndicate_id_card, diagnosis, prescription, notes)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
-  `, [
-    reportId,
-    appointment_id,
-    caseData.patient_id,
-    medical_syndicate_id_card,
-    diagnosis,
-    prescription || null,
-    notes || null
-  ]);
+    const reportId = uuidv4();
+    const caseData = caseResult.rows[0];
 
-  // Update appointment status to completed
-  await pool.query(
-    `UPDATE appointment SET status = 'completed' WHERE appointment_id = $1`,
-    [appointment_id]
-  );
-
-  // Auto-message + lock chat after report submission
-  const chatResult = await pool.query(
-    `SELECT chat_id FROM chat WHERE patient_id = $1 AND medical_syndicate_id_card = $2`,
-    [caseData.patient_id, medical_syndicate_id_card]
-  );
-
-  if (chatResult.rows.length > 0) {
-    const chatId = chatResult.rows[0].chat_id;
-
-    // Send auto-generated report summary to chat
-    const autoMessageId = uuidv4();
-    const autoText = `📋 Report submitted:\n\nDiagnosis: ${diagnosis}${prescription ? `\nPrescription: ${prescription}` : ''}${notes ? `\nNotes: ${notes}` : ''}`;
-
-    await pool.query(
-      `INSERT INTO chat_message (message_id, chat_id, sender_role, sender_id, message_text, message_type, sent_at)
-       VALUES ($1, $2, 'system', $3, $4, 'system', NOW())`,
-      [autoMessageId, chatId, medical_syndicate_id_card, autoText]
-    );
-
-    // Lock the chat — patient can still read but can't send until new appointment
-    await pool.query(
-      `UPDATE chat SET status = 'locked', updated_at = NOW() WHERE chat_id = $1`,
-      [chatId]
-    );
-  }
-
-  return {
-    success: true,
-    message: "Case reviewed successfully and report created",
-    data: {
-      report_id: reportId,
+    await client.query(`
+      INSERT INTO report
+      (report_id, appointment_id, patient_id, medical_syndicate_id_card, diagnosis, prescription, notes)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [
+      reportId,
       appointment_id,
-      patient_id: caseData.patient_id
+      caseData.patient_id,
+      medical_syndicate_id_card,
+      diagnosis.trim(),
+      prescription ? prescription.trim() : null,
+      notes ? notes.trim() : null
+    ]);
+
+    // Update appointment status to completed
+    await client.query(
+      `UPDATE appointment SET status = 'completed' WHERE appointment_id = $1`,
+      [appointment_id]
+    );
+
+    // Auto-message + lock chat after report submission
+    const chatResult = await client.query(
+      `SELECT chat_id FROM chat WHERE patient_id = $1 AND medical_syndicate_id_card = $2`,
+      [caseData.patient_id, medical_syndicate_id_card]
+    );
+
+    if (chatResult.rows.length > 0) {
+      const chatId = chatResult.rows[0].chat_id;
+
+      // Send auto-generated report summary to chat
+      const autoMessageId = uuidv4();
+      const autoText = `📋 Report submitted:\n\nDiagnosis: ${diagnosis.trim()}${prescription ? `\nPrescription: ${prescription.trim()}` : ''}${notes ? `\nNotes: ${notes.trim()}` : ''}`;
+
+      await client.query(
+        `INSERT INTO chat_message (message_id, chat_id, sender_role, sender_id, message_text, message_type, sent_at)
+         VALUES ($1, $2, 'system', $3, $4, 'system', NOW())`,
+        [autoMessageId, chatId, medical_syndicate_id_card, autoText]
+      );
+
+      // Lock the chat — patient can still read but can't send until new appointment
+      await client.query(
+        `UPDATE chat SET status = 'locked', updated_at = NOW() WHERE chat_id = $1`,
+        [chatId]
+      );
     }
-  };
+
+    await client.query('COMMIT');
+
+    return {
+      success: true,
+      message: "Case reviewed successfully and report created",
+      data: {
+        report_id: reportId,
+        appointment_id,
+        patient_id: caseData.patient_id
+      }
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+
+    // Handle race condition: unique constraint on report.appointment_id
+    if (err.code === '23505') {
+      const conflictErr = new Error("This case has already been reviewed");
+      conflictErr.status = 409;
+      throw conflictErr;
+    }
+
+    throw err;
+  } finally {
+    client.release();
+  }
 };
