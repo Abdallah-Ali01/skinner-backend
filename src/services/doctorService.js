@@ -1,5 +1,6 @@
 const pool = require("../config/database");
-const { v4: uuidv4, validate: validateUuid } = require("uuid");
+const { v4: uuidv4 } = require("uuid");
+const validateUuid = (uuid) => typeof uuid === 'string' && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(uuid);
 
 exports.getPendingCases = async (doctorId) => {
   const result = await pool.query(`
