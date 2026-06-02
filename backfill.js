@@ -21,35 +21,38 @@ async function backfill() {
     console.log(`Found ${appointmentsResult.rows.length} confirmed appointments. Checking for missing summary cards...`);
 
     for (const appt of appointmentsResult.rows) {
-      // Check if a system summary message already exists for this chat
-      const existing = await pool.query(
-        `SELECT 1 FROM chat_message 
-         WHERE chat_id = $1 
-           AND sender_role = 'system' 
-           AND original_filename = 'skin_analysis.jpg' 
-         LIMIT 1`,
-        [appt.chat_id]
+      console.log(`Checking appointment ${appt.appointment_id} for Chat ${appt.chat_id}...`);
+      
+      const detailsResult = await pool.query(
+        `SELECT 
+           p.age, p.gender, 
+           an.skin_image_upload, an.analysis, an.skin_disease_classification, an.created_at
+         FROM appointment a
+         JOIN patient p ON a.patient_id = p.patient_id
+         JOIN analysis an ON a.analysis_id = an.analysis_id
+         WHERE a.appointment_id = $1`,
+        [appt.appointment_id]
       );
 
-      if (existing.rows.length === 0) {
-        console.log(`Chat ${appt.chat_id} is missing a summary card. Fetching patient & analysis info...`);
-        
-        const detailsResult = await pool.query(
-          `SELECT 
-             p.age, p.gender, 
-             an.skin_image_upload, an.analysis, an.skin_disease_classification, an.created_at
-           FROM appointment a
-           JOIN patient p ON a.patient_id = p.patient_id
-           JOIN analysis an ON a.analysis_id = an.analysis_id
-           WHERE a.appointment_id = $1`,
-          [appt.appointment_id]
-        );
+      if (detailsResult.rows.length > 0) {
+        const details = detailsResult.rows[0];
+        const imageUpload = details.skin_image_upload;
 
-        if (detailsResult.rows.length > 0) {
-          const details = detailsResult.rows[0];
-          const imageUpload = details.skin_image_upload;
+        if (imageUpload) {
+          // Check if a system summary message already exists for this chat and specific scan
+          const existing = await pool.query(
+            `SELECT 1 FROM chat_message 
+             WHERE chat_id = $1 
+               AND sender_role = 'system' 
+               AND file_url = $2
+               AND original_filename = 'skin_analysis.jpg' 
+             LIMIT 1`,
+            [appt.chat_id, imageUpload]
+          );
 
-          if (imageUpload) {
+          if (existing.rows.length === 0) {
+            console.log(`Chat ${appt.chat_id} is missing a summary card for scan ${imageUpload}. Fetching info...`);
+            
             const patientAge = details.age || "N/A";
             const patientGender = details.gender ? (details.gender.charAt(0).toUpperCase() + details.gender.slice(1)) : "N/A";
             const classification = details.skin_disease_classification || "N/A";
@@ -86,11 +89,11 @@ async function backfill() {
                 imageUpload
               ]
             );
-            console.log(`Successfully backfilled summary card for Chat ${appt.chat_id}!`);
+            console.log(`Successfully backfilled summary card for Chat ${appt.chat_id} (Scan: ${imageUpload})!`);
+          } else {
+            console.log(`Chat ${appt.chat_id} already has a summary card for scan ${imageUpload}.`);
           }
         }
-      } else {
-        console.log(`Chat ${appt.chat_id} already has a summary card.`);
       }
     }
     console.log("Backfill complete!");
