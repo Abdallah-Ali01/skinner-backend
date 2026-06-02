@@ -82,7 +82,6 @@ async function backfill() {
                 autoMessageId,
                 appt.chat_id,
                 'system',
-                appt.medical_syndicate_id_card,
                 autoText,
                 imageUpload
               ]
