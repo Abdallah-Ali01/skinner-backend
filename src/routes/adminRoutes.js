@@ -118,4 +118,8 @@ router.get("/reports", verifyToken, allowRoles("admin"), adminController.getRepo
  *         description: Only super admin can perform this action
  */
 router.post("/generate-admin-code", verifyToken, allowRoles("admin"), superAdminOnly, adminController.generateAdminCode);
+router.get("/stats", verifyToken, allowRoles("admin"), adminController.getStats);
+router.get("/analyses", verifyToken, allowRoles("admin"), adminController.getAnalyses);
+router.get("/users", verifyToken, allowRoles("admin"), adminController.getUsers);
+
 module.exports = router;

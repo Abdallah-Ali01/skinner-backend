@@ -187,3 +187,98 @@ exports.generateAdminCode = async (adminId) => {
     }
   };
 };
+
+exports.getStats = async () => {
+  const patientsCount = await pool.query("SELECT COUNT(*) AS count FROM patient");
+  const approvedDoctorsCount = await pool.query("SELECT COUNT(*) AS count FROM doctor WHERE approval_status = 'approved'");
+  const pendingDoctorsCount = await pool.query("SELECT COUNT(*) AS count FROM doctor WHERE approval_status = 'pending'");
+  const analysesCount = await pool.query("SELECT COUNT(*) AS count FROM analysis");
+
+  const totalPatients = parseInt(patientsCount.rows[0].count, 10);
+  const activeDoctors = parseInt(approvedDoctorsCount.rows[0].count, 10);
+  const pendingApprovals = parseInt(pendingDoctorsCount.rows[0].count, 10);
+  const totalAnalyses = parseInt(analysesCount.rows[0].count, 10);
+
+  return {
+    success: true,
+    data: {
+      totalUsers: totalPatients + activeDoctors + pendingApprovals,
+      activeDoctors,
+      pendingApprovals,
+      totalAnalyses
+    }
+  };
+};
+
+exports.getAnalyses = async () => {
+  const result = await pool.query(
+    `
+    SELECT
+      a.analysis_id,
+      a.patient_id,
+      a.analysis,
+      a.skin_image_upload,
+      a.treatment_suggestion,
+      a.skin_disease_classification,
+      a.doctor_recommendation,
+      a.created_at,
+      p.name AS patient_name,
+      p.email AS patient_email
+    FROM analysis a
+    JOIN patient p ON a.patient_id = p.patient_id
+    ORDER BY a.created_at DESC
+    `
+  );
+
+  return {
+    success: true,
+    count: result.rows.length,
+    data: result.rows
+  };
+};
+
+exports.getUsers = async () => {
+  const patientsRes = await pool.query(
+    `
+    SELECT
+      patient_id AS id,
+      name,
+      phone,
+      gender,
+      email,
+      age,
+      address,
+      created_at
+    FROM patient
+    ORDER BY created_at DESC
+    `
+  );
+
+  const doctorsRes = await pool.query(
+    `
+    SELECT
+      medical_syndicate_id_card AS id,
+      name,
+      phone,
+      gender,
+      email,
+      specialization,
+      year_of_experience,
+      clinic_address,
+      approval_status
+    FROM doctor
+    ORDER BY name ASC
+    `
+  );
+
+  const patients = patientsRes.rows.map(r => ({ ...r, role: "patient" }));
+  const doctors = doctorsRes.rows.map(r => ({ ...r, role: "doctor" }));
+
+  return {
+    success: true,
+    data: {
+      patients,
+      doctors
+    }
+  };
+};

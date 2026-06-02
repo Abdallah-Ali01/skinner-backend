@@ -59,3 +59,39 @@ exports.generateAdminCode = async (req, res) => {
     });
   }
 };
+
+exports.getStats = async (req, res) => {
+  try {
+    const result = await adminService.getStats();
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+exports.getAnalyses = async (req, res) => {
+  try {
+    const result = await adminService.getAnalyses();
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+exports.getUsers = async (req, res) => {
+  try {
+    const result = await adminService.getUsers();
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
