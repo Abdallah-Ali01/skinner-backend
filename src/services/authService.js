@@ -51,7 +51,6 @@ exports.registerPatient = async (data) => {
 
 exports.registerDoctor = async (data, file) => {
   const {
-    medical_syndicate_id_card,
     name,
     phone,
     gender,
@@ -66,13 +65,12 @@ exports.registerDoctor = async (data, file) => {
   } = data;
 
   if (
-    !medical_syndicate_id_card ||
     !name ||
     !email ||
     !password ||
     !specialization
   ) {
-    const err = new Error("medical_syndicate_id_card, name, email, password, and specialization are required");
+    const err = new Error("name, email, password, and specialization are required");
     err.status = 400;
     throw err;
   }
@@ -84,14 +82,28 @@ exports.registerDoctor = async (data, file) => {
   }
 
   const existing = await pool.query(
-    `SELECT 1 FROM doctor WHERE email = $1 OR medical_syndicate_id_card = $2`,
-    [email, medical_syndicate_id_card]
+    `SELECT 1 FROM doctor WHERE email = $1`,
+    [email]
   );
 
   if (existing.rows.length > 0) {
-    const err = new Error("Doctor already exists with this email or syndicate ID");
+    const err = new Error("Doctor already exists with this email");
     err.status = 409;
     throw err;
+  }
+
+  // Generate highly unique timestamp-based doctor identifier (with a random suffix to completely prevent collisions)
+  let doctorId = "";
+  let isUnique = false;
+  while (!isUnique) {
+    doctorId = `DOC-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+    const existingId = await pool.query(
+      `SELECT 1 FROM doctor WHERE medical_syndicate_id_card = $1`,
+      [doctorId]
+    );
+    if (existingId.rows.length === 0) {
+      isUnique = true;
+    }
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -120,7 +132,7 @@ exports.registerDoctor = async (data, file) => {
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
     `,
     [
-      medical_syndicate_id_card,
+      doctorId,
       name,
       phone || null,
       gender || null,
@@ -142,7 +154,7 @@ exports.registerDoctor = async (data, file) => {
     success: true,
     message: "Doctor registered successfully",
     data: {
-      medical_syndicate_id_card,
+      medical_syndicate_id_card: doctorId,
       email,
       approval_status: "pending",
       syndicate_card_image: syndicateCardImage
