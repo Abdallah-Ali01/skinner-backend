@@ -362,7 +362,7 @@ exports.updateReport = async (doctorId, data) => {
     // Update report
     await client.query(
       `UPDATE report
-       SET diagnosis = $1, prescription = $2, notes = $3, updated_at = NOW()
+       SET diagnosis = $1, prescription = $2, notes = $3
        WHERE appointment_id = $4 AND medical_syndicate_id_card = $5`,
       [
         diagnosis.trim(),
