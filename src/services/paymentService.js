@@ -115,15 +115,15 @@ exports.payAppointment = async (patientId, data) => {
       const imageUpload = details.skin_image_upload;
 
       if (imageUpload) {
-        // Prevent duplicate system messages for the same analysis scan
+        // Prevent duplicate system messages for the same appointment
         const duplicateCheck = await pool.query(
           `SELECT 1 FROM chat_message 
            WHERE chat_id = $1 
              AND sender_role = 'system' 
-             AND file_url = $2
-             AND original_filename = 'skin_analysis.jpg' 
+             AND original_filename = 'skin_analysis.jpg'
+             AND message_text LIKE '%Appointment: ' || $2 || '%'
            LIMIT 1`,
-          [chatId, imageUpload]
+          [chatId, appointment_id]
         );
 
         if (duplicateCheck.rows.length === 0) {
@@ -146,6 +146,7 @@ exports.payAppointment = async (patientId, data) => {
 
           // Build structured key-value text for the premium Clinical Summary Card
           const autoText = `📋 CLINICAL SUMMARY CARD\n` +
+            `Appointment: ${appointment_id}\n` +
             `Patient: ${patientGender}, ${patientAge}\n` +
             `AI Prediction: ${classification}\n` +
             `Confidence: ${confidencePercent}\n` +
