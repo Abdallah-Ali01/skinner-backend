@@ -60,10 +60,52 @@ app.get("/health", (req, res) => {
 
 app.get("/db-test", async (req, res) => {
   try {
-    const result = await pool.query("SELECT NOW()");
+    // 1. Get column info for chat_message
+    const columnsRes = await pool.query(
+      `SELECT column_name, data_type 
+       FROM information_schema.columns 
+       WHERE table_name = 'chat_message'`
+    );
+    
+    // 2. Try to run the query to see if it fails
+    let queryError = null;
+    let queryResult = null;
+    try {
+      const testQ = await pool.query(
+        `SELECT COUNT(*)::integer FROM chat_message WHERE is_read = FALSE`
+      );
+      queryResult = testQ.rows[0];
+    } catch (e) {
+      queryError = e.message;
+    }
+
+    // 3. Try running the getPendingCases query with a dummy uuid or no results
+    let pendingCasesError = null;
+    try {
+      await pool.query(`
+        SELECT
+          a.appointment_id,
+          (
+            SELECT COUNT(*)::integer
+            FROM chat_message cm2
+            WHERE cm2.chat_id = c.chat_id
+              AND cm2.sender_role != 'doctor'
+              AND cm2.is_read = FALSE
+          ) AS unread_count
+        FROM appointment a
+        LEFT JOIN chat c ON a.patient_id = c.patient_id
+        LIMIT 1
+      `);
+    } catch (e) {
+      pendingCasesError = e.message;
+    }
+
     res.json({
       success: true,
-      server_time: result.rows[0].now
+      columns: columnsRes.rows,
+      queryResult,
+      queryError,
+      pendingCasesError
     });
   } catch (error) {
     res.status(500).json({
