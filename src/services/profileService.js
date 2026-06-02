@@ -1,9 +1,61 @@
 const pool = require("../config/database");
 
+function getBirthDateFromNationalId(nationalId = "") {
+  const cleanId = String(nationalId).trim();
+  if (!/^[23][0-9]{13}$/.test(cleanId)) return null;
+  const centuryDigit = Number(cleanId[0]);
+  const yearPart = cleanId.slice(1, 3);
+  const monthPart = cleanId.slice(3, 5);
+  const dayPart = cleanId.slice(5, 7);
+  
+  const centuryPrefix = centuryDigit === 2 ? "19" : "20";
+  const birthYear = Number(centuryPrefix + yearPart);
+  const birthMonth = Number(monthPart) - 1; // 0-indexed month
+  const birthDay = Number(dayPart);
+  
+  const birthDate = new Date(birthYear, birthMonth, birthDay);
+  if (
+    birthDate.getFullYear() !== birthYear ||
+    birthDate.getMonth() !== birthMonth ||
+    birthDate.getDate() !== birthDay
+  ) {
+    return null;
+  }
+  return birthDate;
+}
+
+function calculateAge(birthDate) {
+  if (!birthDate) return 0;
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+}
+
 /**
  * Update patient profile (only allowed fields).
  */
 exports.updatePatientProfile = async (patientId, data) => {
+  if (data.phone !== undefined) {
+    if (data.phone && !/^(\+20|0)(10|11|12|15)[0-9]{8}$/.test(String(data.phone).trim())) {
+      const err = new Error("Invalid Egyptian mobile number. Must be a valid 010, 011, 012, or 015 number (11 digits or starting with +20).");
+      err.status = 400;
+      throw err;
+    }
+  }
+
+  if (data.age !== undefined) {
+    const numericAge = Number(data.age);
+    if (isNaN(numericAge) || numericAge < 13 || numericAge > 100 || !Number.isInteger(numericAge)) {
+      const err = new Error("Invalid age. Must be an integer between 13 and 100.");
+      err.status = 400;
+      throw err;
+    }
+  }
+
   const allowedFields = ["name", "phone", "gender", "age", "address", "patient_history"];
   const updates = [];
   const values = [];
@@ -59,9 +111,82 @@ exports.updatePatientProfile = async (patientId, data) => {
  * Update doctor profile (only allowed fields).
  */
 exports.updateDoctorProfile = async (doctorId, data) => {
+  if (data.phone !== undefined) {
+    if (data.phone && !/^(\+20|0)(10|11|12|15)[0-9]{8}$/.test(String(data.phone).trim())) {
+      const err = new Error("Invalid Egyptian mobile number. Must be a valid 010, 011, 012, or 015 number (11 digits or starting with +20).");
+      err.status = 400;
+      throw err;
+    }
+  }
+
+  let currentAge = null;
+  let currentExp = null;
+  let currentNationalId = null;
+
+  if (data.age !== undefined || data.year_of_experience !== undefined) {
+    const docRes = await pool.query(
+      "SELECT age, year_of_experience, national_id FROM doctor WHERE medical_syndicate_id_card = $1",
+      [doctorId]
+    );
+    if (docRes.rows.length > 0) {
+      currentAge = docRes.rows[0].age;
+      currentExp = docRes.rows[0].year_of_experience;
+      currentNationalId = docRes.rows[0].national_id;
+    }
+  }
+
+  if (data.age !== undefined) {
+    const numericAge = Number(data.age);
+    if (isNaN(numericAge) || numericAge < 23 || numericAge > 75 || !Number.isInteger(numericAge)) {
+      const err = new Error("Invalid age. Must be an integer between 23 and 75.");
+      err.status = 400;
+      throw err;
+    }
+
+    if (currentNationalId) {
+      const birthDate = getBirthDateFromNationalId(currentNationalId);
+      if (birthDate) {
+        const calculatedAge = calculateAge(birthDate);
+        if (numericAge !== calculatedAge) {
+          const err = new Error(`Entered age (${numericAge}) does not match the age calculated from National ID (${calculatedAge}).`);
+          err.status = 400;
+          throw err;
+        }
+      }
+    }
+    currentAge = numericAge;
+  }
+
+  if (data.year_of_experience !== undefined) {
+    const exp = Number(data.year_of_experience);
+    if (isNaN(exp) || exp < 0 || exp > 45 || !Number.isInteger(exp)) {
+      const err = new Error("Invalid Experience years. Must be an integer between 0 and 45.");
+      err.status = 400;
+      throw err;
+    }
+    currentExp = exp;
+  }
+
+  if (currentAge !== null && currentExp !== null) {
+    if (currentExp > currentAge - 23) {
+      const err = new Error(`Years of experience (${currentExp}) is unrealistic for age (${currentAge}). Maximum possible experience is ${currentAge - 23} years.`);
+      err.status = 400;
+      throw err;
+    }
+  }
+
+  if (data.consultation_fee !== undefined) {
+    const fee = Number(data.consultation_fee);
+    if (isNaN(fee) || fee < 50 || fee > 3000 || !Number.isInteger(fee)) {
+      const err = new Error("Invalid Consultation fee. Must be an integer between 50 and 3000 EGP.");
+      err.status = 400;
+      throw err;
+    }
+  }
+
   const allowedFields = [
     "name", "phone", "gender", "clinic_address",
-    "year_of_experience", "specialization", "consultation_fee"
+    "year_of_experience", "specialization", "consultation_fee", "age"
   ];
   const updates = [];
   const values = [];

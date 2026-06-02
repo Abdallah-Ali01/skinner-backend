@@ -44,15 +44,39 @@ function calculateAge(birthDate) {
 exports.registerPatient = async (data) => {
   const { name, phone, gender, email, password, age, address } = data;
 
-  if (!name || !email || !password) {
-    const err = new Error("name, email, and password are required");
+  if (!name || !email || !password || age === undefined || age === null) {
+    const err = new Error("name, email, password, and age are required");
+    err.status = 400;
+    throw err;
+  }
+
+  const cleanEmail = String(email).trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!emailRegex.test(cleanEmail)) {
+    const err = new Error("Invalid email format");
+    err.status = 400;
+    throw err;
+  }
+
+  if (phone) {
+    const cleanPhone = String(phone).trim();
+    if (!/^(\+20|0)(10|11|12|15)[0-9]{8}$/.test(cleanPhone)) {
+      const err = new Error("Invalid Egyptian mobile number. Must be a valid 010, 011, 012, or 015 number (11 digits or starting with +20).");
+      err.status = 400;
+      throw err;
+    }
+  }
+
+  const numericAge = Number(age);
+  if (isNaN(numericAge) || numericAge < 13 || numericAge > 100 || !Number.isInteger(numericAge)) {
+    const err = new Error("Invalid age. Must be an integer between 13 and 100.");
     err.status = 400;
     throw err;
   }
 
   const existing = await pool.query(
-    `SELECT 1 FROM patient WHERE email = $1`,
-    [email]
+    `SELECT 1 FROM patient WHERE LOWER(email) = $1`,
+    [cleanEmail]
   );
 
   if (existing.rows.length > 0) {
@@ -71,7 +95,7 @@ exports.registerPatient = async (data) => {
     (patient_id, name, phone, gender, email, password, age, address, created_at, updated_at)
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
     `,
-    [patientId, name, phone, gender, email, hashedPassword, age, address, now, now]
+    [patientId, name, phone || null, gender || null, cleanEmail, hashedPassword, numericAge, address || null, now, now]
   );
 
   return {
@@ -79,7 +103,7 @@ exports.registerPatient = async (data) => {
     message: "Patient registered successfully",
     data: {
       patient_id: patientId,
-      email
+      email: cleanEmail
     }
   };
 };
@@ -96,28 +120,40 @@ exports.registerDoctor = async (data, file) => {
     specialization,
     clinic_address,
     admin_id,
-    consultation_fee
+    consultation_fee,
+    age
   } = data;
 
   if (
     !name ||
     !email ||
     !password ||
-    !specialization
+    !specialization ||
+    age === undefined ||
+    age === null
   ) {
-    const err = new Error("name, email, password, and specialization are required");
+    const err = new Error("name, email, password, specialization, and age are required");
     err.status = 400;
     throw err;
   }
 
-  // 1. Phone number validation (Egyptian mobile formats)
+  // 1. Email validation & normalization
+  const cleanEmail = String(email).trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!emailRegex.test(cleanEmail)) {
+    const err = new Error("Invalid email format");
+    err.status = 400;
+    throw err;
+  }
+
+  // 2. Phone number validation (Egyptian mobile formats)
   if (!phone || !/^(\+20|0)(10|11|12|15)[0-9]{8}$/.test(String(phone).trim())) {
     const err = new Error("Invalid Egyptian mobile number. Must be a valid 010, 011, 012, or 015 number (11 digits or starting with +20).");
     err.status = 400;
     throw err;
   }
 
-  // 2. National ID validation (14 digits, digits only, starting with 2 or 3)
+  // 3. National ID validation (14 digits, digits only, starting with 2 or 3)
   const cleanNationalId = String(national_id).trim();
   if (!/^[23][0-9]{13}$/.test(cleanNationalId)) {
     const err = new Error("Invalid National ID. Must be exactly 14 digits and start with 2 or 3.");
@@ -132,14 +168,25 @@ exports.registerDoctor = async (data, file) => {
     throw err;
   }
 
-  const age = calculateAge(birthDate);
-  if (age < 24) {
-    const err = new Error("Doctor must be at least 24 years old based on National ID.");
+  // Calculate age from National ID for consistency check
+  const calculatedAge = calculateAge(birthDate);
+
+  // 4. Age validation
+  const numericAge = Number(age);
+  if (isNaN(numericAge) || numericAge < 23 || numericAge > 75 || !Number.isInteger(numericAge)) {
+    const err = new Error("Invalid age. Must be an integer between 23 and 75.");
     err.status = 400;
     throw err;
   }
 
-  // 3. Experience Years Validation (0 to 45 years)
+  // Consistency check: Entered age must match National ID age
+  if (numericAge !== calculatedAge) {
+    const err = new Error(`Entered age (${numericAge}) does not match the age calculated from National ID (${calculatedAge}).`);
+    err.status = 400;
+    throw err;
+  }
+
+  // 5. Experience Years Validation (0 to 45 years)
   const exp = Number(year_of_experience);
   if (year_of_experience === undefined || year_of_experience === null || isNaN(exp) || exp < 0 || exp > 45 || !Number.isInteger(exp)) {
     const err = new Error("Invalid Experience years. Must be an integer between 0 and 45.");
@@ -147,14 +194,14 @@ exports.registerDoctor = async (data, file) => {
     throw err;
   }
 
-  // Experience age consistency check (earliest graduation = age 24)
-  if (exp > age - 24) {
-    const err = new Error(`Years of experience (${exp}) is unrealistic for age (${age}). Maximum possible experience is ${age - 24} years.`);
+  // Experience age consistency check: exp <= age - 23
+  if (exp > numericAge - 23) {
+    const err = new Error(`Years of experience (${exp}) is unrealistic for age (${numericAge}). Maximum possible experience is ${numericAge - 23} years.`);
     err.status = 400;
     throw err;
   }
 
-  // 4. Consultation Fee Validation (50 to 3000 EGP)
+  // 6. Consultation Fee Validation (50 to 3000 EGP)
   const fee = Number(consultation_fee);
   if (consultation_fee === undefined || consultation_fee === null || isNaN(fee) || fee < 50 || fee > 3000 || !Number.isInteger(fee)) {
     const err = new Error("Invalid Consultation fee. Must be an integer between 50 and 3000 EGP.");
@@ -169,8 +216,8 @@ exports.registerDoctor = async (data, file) => {
   }
 
   const existing = await pool.query(
-    `SELECT 1 FROM doctor WHERE email = $1`,
-    [email]
+    `SELECT 1 FROM doctor WHERE LOWER(email) = $1`,
+    [cleanEmail]
   );
 
   if (existing.rows.length > 0) {
@@ -214,26 +261,28 @@ exports.registerDoctor = async (data, file) => {
       admin_id,
       approval_status,
       syndicate_card_image,
-      consultation_fee
+      consultation_fee,
+      age
     )
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
     `,
     [
       doctorId,
       name,
       phone || null,
       gender || null,
-      email,
-      national_id || null,
+      cleanEmail,
+      cleanNationalId,
       hashedPassword,
       null,
-      year_of_experience || null,
+      exp,
       specialization,
       clinic_address || null,
       admin_id || null,
       "pending",
       syndicateCardImage,
-      consultation_fee || 0
+      fee,
+      numericAge
     ]
   );
 
@@ -242,7 +291,7 @@ exports.registerDoctor = async (data, file) => {
     message: "Doctor registered successfully",
     data: {
       medical_syndicate_id_card: doctorId,
-      email,
+      email: cleanEmail,
       approval_status: "pending",
       syndicate_card_image: syndicateCardImage
     }
@@ -258,9 +307,17 @@ exports.registerAdmin = async (data) => {
     throw err;
   }
 
+  const cleanEmail = String(email).trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!emailRegex.test(cleanEmail)) {
+    const err = new Error("Invalid email format");
+    err.status = 400;
+    throw err;
+  }
+
   const existing = await pool.query(
-    `SELECT 1 FROM admin WHERE email = $1`,
-    [email]
+    `SELECT 1 FROM admin WHERE LOWER(email) = $1`,
+    [cleanEmail]
   );
 
   if (existing.rows.length > 0) {
@@ -300,7 +357,7 @@ exports.registerAdmin = async (data) => {
     (admin_id, email, password, admin_role)
     VALUES ($1, $2, $3, $4)
     `,
-    [adminId, email, hashedPassword, "admin"]
+    [adminId, cleanEmail, hashedPassword, "admin"]
   );
 
   await pool.query(
@@ -318,7 +375,7 @@ exports.registerAdmin = async (data) => {
     message: "Admin registered successfully",
     data: {
       admin_id: adminId,
-      email,
+      email: cleanEmail,
       admin_role: "admin"
     }
   };
@@ -333,17 +390,25 @@ exports.login = async (data) => {
     throw err;
   }
 
+  const cleanEmail = String(email).trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!emailRegex.test(cleanEmail)) {
+    const err = new Error("Invalid email format");
+    err.status = 400;
+    throw err;
+  }
+
   let query = "";
   let idField = "";
 
   if (role === "patient") {
-    query = `SELECT * FROM patient WHERE email = $1`;
+    query = `SELECT * FROM patient WHERE LOWER(email) = $1`;
     idField = "patient_id";
   } else if (role === "doctor") {
-    query = `SELECT * FROM doctor WHERE email = $1`;
+    query = `SELECT * FROM doctor WHERE LOWER(email) = $1`;
     idField = "medical_syndicate_id_card";
   } else if (role === "admin") {
-    query = `SELECT * FROM admin WHERE email = $1`;
+    query = `SELECT * FROM admin WHERE LOWER(email) = $1`;
     idField = "admin_id";
   } else {
     const err = new Error("Invalid role");
@@ -351,7 +416,7 @@ exports.login = async (data) => {
     throw err;
   }
 
-  const result = await pool.query(query, [email]);
+  const result = await pool.query(query, [cleanEmail]);
 
   if (result.rows.length === 0) {
     const err = new Error("Invalid email or password");
@@ -474,10 +539,11 @@ exports.getMe = async (userData) => {
  * Search all role tables and return the role for a given email.
  */
 async function detectRoleByEmail(email) {
+  const cleanEmail = String(email).trim().toLowerCase();
   for (const role of Object.keys(TABLE_MAP)) {
     const result = await pool.query(
-      `SELECT 1 FROM ${TABLE_MAP[role]} WHERE email = $1`,
-      [email]
+      `SELECT 1 FROM ${TABLE_MAP[role]} WHERE LOWER(email) = $1`,
+      [cleanEmail]
     );
     if (result.rows.length > 0) return role;
   }
@@ -493,7 +559,15 @@ exports.forgotPassword = async (data) => {
     throw err;
   }
 
-  const role = await detectRoleByEmail(email);
+  const cleanEmail = String(email).trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!emailRegex.test(cleanEmail)) {
+    const err = new Error("Invalid email format");
+    err.status = 400;
+    throw err;
+  }
+
+  const role = await detectRoleByEmail(cleanEmail);
 
   if (!role) {
     const err = new Error("No account found with this email");
@@ -505,8 +579,8 @@ exports.forgotPassword = async (data) => {
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
   await pool.query(
-    `DELETE FROM password_reset WHERE email = $1 AND role = $2`,
-    [email, role]
+    `DELETE FROM password_reset WHERE LOWER(email) = $1 AND role = $2`,
+    [cleanEmail, role]
   );
 
   await pool.query(
@@ -514,11 +588,11 @@ exports.forgotPassword = async (data) => {
     INSERT INTO password_reset (email, role, reset_code, expires_at)
     VALUES ($1, $2, $3, $4)
     `,
-    [email, role, otpCode, expiresAt]
+    [cleanEmail, role, otpCode, expiresAt]
   );
 
   await emailService.sendResetPasswordOtpEmail({
-    to: email,
+    to: cleanEmail,
     otpCode
   });
 
@@ -537,14 +611,22 @@ exports.resetPassword = async (data) => {
     throw err;
   }
 
+  const cleanEmail = String(email).trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!emailRegex.test(cleanEmail)) {
+    const err = new Error("Invalid email format");
+    err.status = 400;
+    throw err;
+  }
+
   const codeResult = await pool.query(
     `
     SELECT * FROM password_reset
-    WHERE email = $1
+    WHERE LOWER(email) = $1
       AND reset_code = $2
       AND expires_at > NOW()
     `,
-    [email, otp]
+    [cleanEmail, otp]
   );
 
   if (codeResult.rows.length === 0) {
@@ -559,13 +641,13 @@ exports.resetPassword = async (data) => {
   const hashedPassword = await bcrypt.hash(new_password, 10);
 
   await pool.query(
-    `UPDATE ${tableName} SET password = $1 WHERE email = $2`,
-    [hashedPassword, email]
+    `UPDATE ${tableName} SET password = $1 WHERE LOWER(email) = $2`,
+    [hashedPassword, cleanEmail]
   );
 
   await pool.query(
-    `DELETE FROM password_reset WHERE email = $1`,
-    [email]
+    `DELETE FROM password_reset WHERE LOWER(email) = $1`,
+    [cleanEmail]
   );
 
   return {
