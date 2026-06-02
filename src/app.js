@@ -60,33 +60,10 @@ app.get("/health", (req, res) => {
 
 app.get("/db-test", async (req, res) => {
   try {
-    const confirmedCount = await pool.query(
-      "SELECT COUNT(*) AS count FROM appointment WHERE status = 'confirmed'"
-    );
-    const completedCount = await pool.query(
-      "SELECT COUNT(*) AS count FROM appointment WHERE status = 'completed'"
-    );
-    const pendingPaymentCount = await pool.query(
-      "SELECT COUNT(*) AS count FROM appointment WHERE status = 'pending_payment'"
-    );
-    const chatsCount = await pool.query(
-      "SELECT COUNT(*) AS count FROM chat"
-    );
-    const messagesCount = await pool.query(
-      "SELECT COUNT(*) AS count FROM chat_message"
-    );
-    const summaryCardsCount = await pool.query(
-      "SELECT COUNT(*) AS count FROM chat_message WHERE original_filename = 'skin_analysis.jpg'"
-    );
-
+    const result = await pool.query("SELECT NOW()");
     res.json({
       success: true,
-      confirmedCount: confirmedCount.rows[0].count,
-      completedCount: completedCount.rows[0].count,
-      pendingPaymentCount: pendingPaymentCount.rows[0].count,
-      chatsCount: chatsCount.rows[0].count,
-      messagesCount: messagesCount.rows[0].count,
-      summaryCardsCount: summaryCardsCount.rows[0].count
+      server_time: result.rows[0].now
     });
   } catch (error) {
     res.status(500).json({

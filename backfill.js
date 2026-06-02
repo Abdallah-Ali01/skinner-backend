@@ -15,7 +15,7 @@ async function backfill() {
       FROM appointment a
       JOIN chat c ON a.patient_id = c.patient_id 
         AND a.medical_syndicate_id_card = c.medical_syndicate_id_card
-      WHERE a.status = 'confirmed'
+      WHERE a.status IN ('confirmed', 'completed')
     `);
 
     console.log(`Found ${appointmentsResult.rows.length} confirmed appointments. Checking for missing summary cards...`);
