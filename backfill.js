@@ -1,3 +1,4 @@
+require("dotenv").config();
 const pool = require("./src/config/database");
 const { v4: uuidv4 } = require("uuid");
 
