@@ -6,9 +6,16 @@ const { Server } = require("socket.io");
 
 const server = http.createServer(app);
 
+const socketAllowedOrigins = [
+  process.env.FRONTEND_URL,
+  "https://skinnerai.site",
+  "https://www.skinnerai.site",
+  "http://localhost:5173"
+].filter(Boolean);
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: socketAllowedOrigins,
     methods: ["GET", "POST"]
   }
 });

@@ -23,7 +23,9 @@ const app = express();
 // Allow multiple origins (local dev + production frontend)
 const allowedOrigins = [
   process.env.FRONTEND_URL,
-  process.env.BASE_URL
+  process.env.BASE_URL,
+  "https://skinnerai.site",
+  "https://www.skinnerai.site"
 ].filter(Boolean);
 
 app.use(cors({
