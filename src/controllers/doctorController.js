@@ -52,3 +52,16 @@ exports.reviewCase = async (req, res) => {
     });
   }
 };
+
+exports.updateReport = async (req, res) => {
+  try {
+    const doctor_id = req.user.id;
+    const result = await doctorService.updateReport(doctor_id, req.body);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};

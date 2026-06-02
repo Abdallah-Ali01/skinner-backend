@@ -276,3 +276,121 @@ exports.reviewCase = async (doctorId, data) => {
     client.release();
   }
 };
+
+exports.updateReport = async (doctorId, data) => {
+  const {
+    appointment_id,
+    diagnosis,
+    prescription,
+    notes
+  } = data;
+
+  const medical_syndicate_id_card = doctorId;
+
+  // --- Input validation ---
+  if (!appointment_id || !diagnosis) {
+    const err = new Error("appointment_id and diagnosis are required");
+    err.status = 400;
+    throw err;
+  }
+
+  if (!validateUuid(appointment_id)) {
+    const err = new Error("Invalid appointment_id format");
+    err.status = 400;
+    throw err;
+  }
+
+  const MAX_DIAGNOSIS_LENGTH = 5000;
+  const MAX_PRESCRIPTION_LENGTH = 3000;
+  const MAX_NOTES_LENGTH = 3000;
+
+  if (typeof diagnosis !== 'string' || diagnosis.trim().length === 0) {
+    const err = new Error("diagnosis must be a non-empty string");
+    err.status = 400;
+    throw err;
+  }
+  if (diagnosis.length > MAX_DIAGNOSIS_LENGTH) {
+    const err = new Error(`diagnosis must not exceed ${MAX_DIAGNOSIS_LENGTH} characters`);
+    err.status = 400;
+    throw err;
+  }
+  if (prescription && typeof prescription === 'string' && prescription.length > MAX_PRESCRIPTION_LENGTH) {
+    const err = new Error(`prescription must not exceed ${MAX_PRESCRIPTION_LENGTH} characters`);
+    err.status = 400;
+    throw err;
+  }
+  if (notes && typeof notes === 'string' && notes.length > MAX_NOTES_LENGTH) {
+    const err = new Error(`notes must not exceed ${MAX_NOTES_LENGTH} characters`);
+    err.status = 400;
+    throw err;
+  }
+
+  // --- Check if report exists and belongs to this doctor ---
+  const reportCheck = await pool.query(
+    `SELECT report_id, patient_id FROM report 
+     WHERE appointment_id = $1 AND medical_syndicate_id_card = $2`,
+    [appointment_id, medical_syndicate_id_card]
+  );
+
+  if (reportCheck.rows.length === 0) {
+    const err = new Error("Report not found or not authorized to edit");
+    err.status = 404;
+    throw err;
+  }
+
+  const reportData = reportCheck.rows[0];
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Update report
+    await client.query(
+      `UPDATE report
+       SET diagnosis = $1, prescription = $2, notes = $3, updated_at = NOW()
+       WHERE appointment_id = $4 AND medical_syndicate_id_card = $5`,
+      [
+        diagnosis.trim(),
+        prescription ? prescription.trim() : null,
+        notes ? notes.trim() : null,
+        appointment_id,
+        medical_syndicate_id_card
+      ]
+    );
+
+    // Send auto-generated report update message to chat
+    const chatResult = await client.query(
+      `SELECT chat_id FROM chat WHERE patient_id = $1 AND medical_syndicate_id_card = $2`,
+      [reportData.patient_id, medical_syndicate_id_card]
+    );
+
+    if (chatResult.rows.length > 0) {
+      const chatId = chatResult.rows[0].chat_id;
+      const autoMessageId = uuidv4();
+      const autoText = `📋 Report updated:\n\nDiagnosis: ${diagnosis.trim()}${prescription ? `\nPrescription: ${prescription.trim()}` : ''}${notes ? `\nNotes: ${notes.trim()}` : ''}`;
+
+      await client.query(
+        `INSERT INTO chat_message (message_id, chat_id, sender_role, sender_id, message_text, message_type, sent_at)
+         VALUES ($1, $2, 'system', $3, $4, 'system', NOW())`,
+        [autoMessageId, chatId, medical_syndicate_id_card, autoText]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    return {
+      success: true,
+      message: "Report updated successfully",
+      data: {
+        report_id: reportData.report_id,
+        appointment_id,
+        patient_id: reportData.patient_id
+      }
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};

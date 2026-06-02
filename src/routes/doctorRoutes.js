@@ -108,6 +108,30 @@ router.get("/case/:appointmentId", verifyToken, allowRoles("doctor"), doctorCont
  */
 router.post("/review-case", verifyToken, allowRoles("doctor"), doctorController.reviewCase);
 
+/**
+ * @swagger
+ * /api/doctor/update-report:
+ *   put:
+ *     summary: Edit/update an existing doctor report
+ *     tags: [Doctor]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ReviewCaseRequest'
+ *     responses:
+ *       200:
+ *         description: Report updated successfully
+ *       404:
+ *         description: Report not found or not authorized
+ *       500:
+ *         description: Server error
+ */
+router.put("/update-report", verifyToken, allowRoles("doctor"), doctorController.updateReport);
+
 const availabilityController = require("../controllers/availabilityController");
 
 
