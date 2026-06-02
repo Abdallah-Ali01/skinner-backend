@@ -60,6 +60,17 @@ app.get("/health", (req, res) => {
 
 app.get("/db-test", async (req, res) => {
   try {
+    let alterResult = null;
+    let alterError = null;
+    try {
+      const res = await pool.query(
+        "ALTER TABLE chat_message ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;"
+      );
+      alterResult = res.command || "SUCCESS";
+    } catch (e) {
+      alterError = e.message;
+    }
+
     // 1. Get column info for chat_message
     const columnsRes = await pool.query(
       `SELECT column_name, data_type 
@@ -102,6 +113,8 @@ app.get("/db-test", async (req, res) => {
 
     res.json({
       success: true,
+      alterResult,
+      alterError,
       columns: columnsRes.rows,
       queryResult,
       queryError,
