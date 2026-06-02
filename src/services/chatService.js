@@ -44,6 +44,13 @@ const chatService = {
           d.name AS doctor_name,
           d.specialization,
           (
+            SELECT COUNT(*)::integer
+            FROM chat_message cm2
+            WHERE cm2.chat_id = c.chat_id
+              AND cm2.sender_role != 'patient'
+              AND cm2.is_read = FALSE
+          ) AS unread_count,
+          (
             SELECT json_build_object(
               'message_text', cm.message_text,
               'message_type', cm.message_type,
@@ -68,6 +75,13 @@ const chatService = {
           c.updated_at,
           p.name AS patient_name,
           p.email AS patient_email,
+          (
+            SELECT COUNT(*)::integer
+            FROM chat_message cm2
+            WHERE cm2.chat_id = c.chat_id
+              AND cm2.sender_role != 'doctor'
+              AND cm2.is_read = FALSE
+          ) AS unread_count,
           (
             SELECT json_build_object(
               'message_text', cm.message_text,
@@ -112,6 +126,17 @@ const chatService = {
       [chatId]
     );
     return result.rows;
+  },
+
+  async markChatAsRead(chatId, userRole) {
+    await pool.query(
+      `UPDATE chat_message 
+       SET is_read = TRUE 
+       WHERE chat_id = $1 
+         AND sender_role != $2 
+         AND is_read = FALSE`,
+      [chatId, userRole]
+    );
   }
 };
 

@@ -22,6 +22,13 @@ exports.getPendingCases = async (doctorId) => {
       an.doctor_recommendation,
       an.created_at AS analysis_date,
       c.chat_id, c.status AS chat_status,
+      (
+        SELECT COUNT(*)::integer
+        FROM chat_message cm2
+        WHERE cm2.chat_id = c.chat_id
+          AND cm2.sender_role != 'doctor'
+          AND cm2.is_read = FALSE
+      ) AS unread_count,
       pay.payment_status
     FROM appointment a
     JOIN patient p ON a.patient_id = p.patient_id
@@ -68,7 +75,14 @@ exports.getReviewedCases = async (doctorId) => {
       an.doctor_recommendation,
       an.created_at AS analysis_date,
       d.name AS doctor_name,
-      c.chat_id, c.status AS chat_status
+      c.chat_id, c.status AS chat_status,
+      (
+        SELECT COUNT(*)::integer
+        FROM chat_message cm2
+        WHERE cm2.chat_id = c.chat_id
+          AND cm2.sender_role != 'doctor'
+          AND cm2.is_read = FALSE
+      ) AS unread_count
     FROM report r
     JOIN appointment a ON r.appointment_id = a.appointment_id
     JOIN patient p ON r.patient_id = p.patient_id
@@ -109,6 +123,13 @@ exports.getCaseDetails = async (doctorId, appointmentId) => {
       an.doctor_recommendation,
       an.created_at AS analysis_date,
       c.chat_id, c.status AS chat_status,
+      (
+        SELECT COUNT(*)::integer
+        FROM chat_message cm2
+        WHERE cm2.chat_id = c.chat_id
+          AND cm2.sender_role != 'doctor'
+          AND cm2.is_read = FALSE
+      ) AS unread_count,
       pay.payment_status
     FROM appointment a
     JOIN patient p ON a.patient_id = p.patient_id
