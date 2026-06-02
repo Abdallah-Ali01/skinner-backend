@@ -47,18 +47,33 @@ exports.getReviewedCases = async (doctorId) => {
   const result = await pool.query(`
     SELECT
       r.report_id,
-      r.appointment_id,
-      r.patient_id,
-      p.name AS patient_name,
-      d.name AS doctor_name,
-      r.diagnosis,
+      r.diagnosis AS report_diagnosis,
+      r.prescription AS report_prescription,
+      r.notes AS report_notes,
       r.created_at AS date,
+      a.appointment_id,
       a.analysis_id,
+      a.patient_id,
+      a.date AS appointment_date,
+      a.status AS appointment_status,
+      p.name AS patient_name,
+      p.age,
+      p.gender,
+      p.email,
+      p.phone,
+      an.skin_image_upload,
+      an.skin_disease_classification,
+      an.analysis,
+      an.treatment_suggestion,
+      an.doctor_recommendation,
+      an.created_at AS analysis_date,
+      d.name AS doctor_name,
       c.chat_id, c.status AS chat_status
     FROM report r
     JOIN appointment a ON r.appointment_id = a.appointment_id
     JOIN patient p ON r.patient_id = p.patient_id
     JOIN doctor d ON r.medical_syndicate_id_card = d.medical_syndicate_id_card
+    JOIN analysis an ON a.analysis_id = an.analysis_id
     LEFT JOIN chat c ON a.patient_id = c.patient_id
       AND a.medical_syndicate_id_card = c.medical_syndicate_id_card
     WHERE r.medical_syndicate_id_card = $1
