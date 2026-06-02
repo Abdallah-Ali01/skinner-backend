@@ -115,14 +115,15 @@ exports.payAppointment = async (patientId, data) => {
       const imageUpload = details.skin_image_upload;
 
       if (imageUpload) {
-        // Prevent duplicate system messages
+        // Prevent duplicate system messages for the same analysis scan
         const duplicateCheck = await pool.query(
           `SELECT 1 FROM chat_message 
            WHERE chat_id = $1 
              AND sender_role = 'system' 
+             AND file_url = $2
              AND original_filename = 'skin_analysis.jpg' 
            LIMIT 1`,
-          [chatId]
+          [chatId, imageUpload]
         );
 
         if (duplicateCheck.rows.length === 0) {
