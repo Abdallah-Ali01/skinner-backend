@@ -17,7 +17,7 @@ exports.payAppointment = async (patientId, data) => {
 
   // Get appointment details — amount comes from total_cost (set from doctor's consultation_fee)
   const appointmentResult = await pool.query(
-    `SELECT appointment_id, patient_id, medical_syndicate_id_card, status, total_cost
+    `SELECT appointment_id, patient_id, medical_syndicate_id_card, status, total_cost, analysis_id
      FROM appointment WHERE appointment_id = $1`,
     [appointment_id]
   );
@@ -95,6 +95,82 @@ exports.payAppointment = async (patientId, data) => {
        VALUES ($1, $2, $3, $4, 'active', NOW(), NOW())`,
       [chatId, appointment_id, appointment.patient_id, appointment.medical_syndicate_id_card]
     );
+  }
+
+  // --- Auto-Sent Enhanced Analysis Message & Scan ---
+  try {
+    const detailsResult = await pool.query(
+      `SELECT 
+         p.age, p.gender, 
+         an.skin_image_upload, an.analysis, an.skin_disease_classification, an.created_at
+       FROM appointment a
+       JOIN patient p ON a.patient_id = p.patient_id
+       JOIN analysis an ON a.analysis_id = an.analysis_id
+       WHERE a.appointment_id = $1`,
+      [appointment_id]
+    );
+
+    if (detailsResult.rows.length > 0) {
+      const details = detailsResult.rows[0];
+      const imageUpload = details.skin_image_upload;
+
+      if (imageUpload) {
+        // Prevent duplicate system messages
+        const duplicateCheck = await pool.query(
+          `SELECT 1 FROM chat_message 
+           WHERE chat_id = $1 
+             AND sender_role = 'system' 
+             AND original_filename = 'skin_analysis.jpg' 
+           LIMIT 1`,
+          [chatId]
+        );
+
+        if (duplicateCheck.rows.length === 0) {
+          const patientAge = details.age || "N/A";
+          const patientGender = details.gender ? (details.gender.charAt(0).toUpperCase() + details.gender.slice(1)) : "N/A";
+          const classification = details.skin_disease_classification || "N/A";
+
+          // Parse confidence score and calculate severity if available
+          const analysisText = details.analysis || "";
+          let confidencePercent = "N/A";
+          let severity = "Low";
+          const match = /Confidence\s*:\s*([0-9.]+)/i.exec(analysisText);
+          if (match) {
+            const confFloat = parseFloat(match[1]);
+            const pct = Math.round(confFloat <= 1 ? confFloat * 100 : confFloat);
+            confidencePercent = `${pct}%`;
+            if (pct >= 85) severity = "High";
+            else if (pct >= 60) severity = "Medium";
+          }
+
+          // Build structured key-value text for the premium Clinical Summary Card
+          const autoText = `📋 CLINICAL SUMMARY CARD\n` +
+            `Patient: ${patientGender}, ${patientAge}\n` +
+            `AI Prediction: ${classification}\n` +
+            `Confidence: ${confidencePercent}\n` +
+            `Severity: ${severity}\n` +
+            `Analysis Date: ${new Date(details.created_at || Date.now()).toLocaleDateString("en-US", { year: 'numeric', month: 'short', day: 'numeric' })}\n` +
+            `Scan URL: ${imageUpload}`;
+          
+          const autoMessageId = uuidv4();
+          await pool.query(
+            `INSERT INTO chat_message 
+             (message_id, chat_id, sender_role, sender_id, message_text, message_type, file_url, original_filename, sent_at)
+             VALUES ($1, $2, 'system', $3, $4, 'image', $5, 'skin_analysis.jpg', NOW())`,
+            [
+              autoMessageId, 
+              chatId, 
+              'system', 
+              appointment.medical_syndicate_id_card, 
+              autoText, 
+              imageUpload
+            ]
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Failed to automatically send analysis scan to chat:", err.message);
   }
 
   return {
