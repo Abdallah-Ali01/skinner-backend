@@ -6,6 +6,41 @@ const emailService = require("./emailService");
 
 const TABLE_MAP = { patient: "patient", doctor: "doctor", admin: "admin" };
 
+function getBirthDateFromNationalId(nationalId = "") {
+  const cleanId = String(nationalId).trim();
+  if (!/^[23][0-9]{13}$/.test(cleanId)) return null;
+  const centuryDigit = Number(cleanId[0]);
+  const yearPart = cleanId.slice(1, 3);
+  const monthPart = cleanId.slice(3, 5);
+  const dayPart = cleanId.slice(5, 7);
+  
+  const centuryPrefix = centuryDigit === 2 ? "19" : "20";
+  const birthYear = Number(centuryPrefix + yearPart);
+  const birthMonth = Number(monthPart) - 1; // 0-indexed month
+  const birthDay = Number(dayPart);
+  
+  const birthDate = new Date(birthYear, birthMonth, birthDay);
+  if (
+    birthDate.getFullYear() !== birthYear ||
+    birthDate.getMonth() !== birthMonth ||
+    birthDate.getDate() !== birthDay
+  ) {
+    return null;
+  }
+  return birthDate;
+}
+
+function calculateAge(birthDate) {
+  if (!birthDate) return 0;
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+}
+
 exports.registerPatient = async (data) => {
   const { name, phone, gender, email, password, age, address } = data;
 
@@ -71,6 +106,58 @@ exports.registerDoctor = async (data, file) => {
     !specialization
   ) {
     const err = new Error("name, email, password, and specialization are required");
+    err.status = 400;
+    throw err;
+  }
+
+  // 1. Phone number validation (Egyptian mobile formats)
+  if (!phone || !/^(\+20|0)(10|11|12|15)[0-9]{8}$/.test(String(phone).trim())) {
+    const err = new Error("Invalid Egyptian mobile number. Must be a valid 010, 011, 012, or 015 number (11 digits or starting with +20).");
+    err.status = 400;
+    throw err;
+  }
+
+  // 2. National ID validation (14 digits, digits only, starting with 2 or 3)
+  const cleanNationalId = String(national_id).trim();
+  if (!/^[23][0-9]{13}$/.test(cleanNationalId)) {
+    const err = new Error("Invalid National ID. Must be exactly 14 digits and start with 2 or 3.");
+    err.status = 400;
+    throw err;
+  }
+
+  const birthDate = getBirthDateFromNationalId(cleanNationalId);
+  if (!birthDate) {
+    const err = new Error("National ID contains an invalid date of birth.");
+    err.status = 400;
+    throw err;
+  }
+
+  const age = calculateAge(birthDate);
+  if (age < 24) {
+    const err = new Error("Doctor must be at least 24 years old based on National ID.");
+    err.status = 400;
+    throw err;
+  }
+
+  // 3. Experience Years Validation (0 to 45 years)
+  const exp = Number(year_of_experience);
+  if (year_of_experience === undefined || year_of_experience === null || isNaN(exp) || exp < 0 || exp > 45 || !Number.isInteger(exp)) {
+    const err = new Error("Invalid Experience years. Must be an integer between 0 and 45.");
+    err.status = 400;
+    throw err;
+  }
+
+  // Experience age consistency check (earliest graduation = age 24)
+  if (exp > age - 24) {
+    const err = new Error(`Years of experience (${exp}) is unrealistic for age (${age}). Maximum possible experience is ${age - 24} years.`);
+    err.status = 400;
+    throw err;
+  }
+
+  // 4. Consultation Fee Validation (50 to 3000 EGP)
+  const fee = Number(consultation_fee);
+  if (consultation_fee === undefined || consultation_fee === null || isNaN(fee) || fee < 50 || fee > 3000 || !Number.isInteger(fee)) {
+    const err = new Error("Invalid Consultation fee. Must be an integer between 50 and 3000 EGP.");
     err.status = 400;
     throw err;
   }
