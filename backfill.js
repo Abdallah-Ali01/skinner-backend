@@ -58,21 +58,17 @@ async function backfill() {
             const classification = details.skin_disease_classification || "N/A";
 
             let confidencePercent = "N/A";
-            let severity = "Low";
             const match = /Confidence\s*:\s*([0-9.]+)/i.exec(details.analysis || "");
             if (match) {
               const confFloat = parseFloat(match[1]);
               const pct = Math.round(confFloat <= 1 ? confFloat * 100 : confFloat);
               confidencePercent = `${pct}%`;
-              if (pct >= 85) severity = "High";
-              else if (pct >= 60) severity = "Medium";
             }
 
             const autoText = `📋 CLINICAL SUMMARY CARD\n` +
               `Patient: ${patientGender}, ${patientAge}\n` +
               `AI Prediction: ${classification}\n` +
               `Confidence: ${confidencePercent}\n` +
-              `Severity: ${severity}\n` +
               `Analysis Date: ${new Date(details.created_at || Date.now()).toLocaleDateString("en-US", { year: 'numeric', month: 'short', day: 'numeric' })}\n` +
               `Scan URL: ${imageUpload}`;
 

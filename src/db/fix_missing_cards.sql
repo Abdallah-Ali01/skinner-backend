@@ -59,15 +59,6 @@ SELECT
     (regexp_match(an.analysis, 'Confidence\s*:\s*([0-9.]+)', 'i'))[1],
     'N/A'
   ) || E'\n' ||
-  'Severity: ' || CASE
-    WHEN (regexp_match(an.analysis, 'Confidence\s*:\s*([0-9.]+)', 'i'))[1] IS NOT NULL
-     AND CAST((regexp_match(an.analysis, 'Confidence\s*:\s*([0-9.]+)', 'i'))[1] AS NUMERIC) >= 0.85
-    THEN 'High'
-    WHEN (regexp_match(an.analysis, 'Confidence\s*:\s*([0-9.]+)', 'i'))[1] IS NOT NULL
-     AND CAST((regexp_match(an.analysis, 'Confidence\s*:\s*([0-9.]+)', 'i'))[1] AS NUMERIC) >= 0.60
-    THEN 'Medium'
-    ELSE 'Low'
-  END || E'\n' ||
   'Analysis Date: ' || TO_CHAR(COALESCE(an.created_at, NOW()), 'Mon DD, YYYY') || E'\n' ||
   'Scan URL: ' || an.skin_image_upload,
   'image',
