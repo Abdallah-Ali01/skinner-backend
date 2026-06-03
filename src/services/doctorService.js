@@ -250,8 +250,10 @@ exports.reviewCase = async (doctorId, data) => {
       [caseData.patient_id, medical_syndicate_id_card]
     );
 
+    let chatId = null;
+    let chatMessage = null;
     if (chatResult.rows.length > 0) {
-      const chatId = chatResult.rows[0].chat_id;
+      chatId = chatResult.rows[0].chat_id;
 
       // Send auto-generated report summary to chat
       const autoMessageId = uuidv4();
@@ -268,6 +270,18 @@ exports.reviewCase = async (doctorId, data) => {
         `UPDATE chat SET status = 'locked', updated_at = NOW() WHERE chat_id = $1`,
         [chatId]
       );
+
+      chatMessage = {
+        id: autoMessageId,
+        message_id: autoMessageId,
+        chat_id: chatId,
+        sender_role: 'system',
+        sender_id: medical_syndicate_id_card,
+        message_text: autoText,
+        message_type: 'system',
+        sent_at: new Date().toISOString(),
+        is_read: false
+      };
     }
 
     await client.query('COMMIT');
@@ -278,7 +292,9 @@ exports.reviewCase = async (doctorId, data) => {
       data: {
         report_id: reportId,
         appointment_id,
-        patient_id: caseData.patient_id
+        patient_id: caseData.patient_id,
+        chat_id: chatId,
+        chat_message: chatMessage
       }
     };
   } catch (err) {
@@ -368,8 +384,10 @@ exports.updateReport = async (doctorId, data) => {
       [reportData.patient_id, medical_syndicate_id_card]
     );
 
+    let chatId = null;
+    let chatMessage = null;
     if (chatResult.rows.length > 0) {
-      const chatId = chatResult.rows[0].chat_id;
+      chatId = chatResult.rows[0].chat_id;
       const autoMessageId = uuidv4();
       const autoText = `📋 Report updated:\n\n${diagnosis.trim()}`;
 
@@ -378,6 +396,18 @@ exports.updateReport = async (doctorId, data) => {
          VALUES ($1, $2, 'system', $3, $4, 'system', NOW())`,
         [autoMessageId, chatId, medical_syndicate_id_card, autoText]
       );
+
+      chatMessage = {
+        id: autoMessageId,
+        message_id: autoMessageId,
+        chat_id: chatId,
+        sender_role: 'system',
+        sender_id: medical_syndicate_id_card,
+        message_text: autoText,
+        message_type: 'system',
+        sent_at: new Date().toISOString(),
+        is_read: false
+      };
     }
 
     await client.query('COMMIT');
@@ -388,7 +418,9 @@ exports.updateReport = async (doctorId, data) => {
       data: {
         report_id: reportData.report_id,
         appointment_id,
-        patient_id: reportData.patient_id
+        patient_id: reportData.patient_id,
+        chat_id: chatId,
+        chat_message: chatMessage
       }
     };
   } catch (err) {
