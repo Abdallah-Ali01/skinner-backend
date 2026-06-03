@@ -157,9 +157,7 @@ exports.getCaseDetails = async (doctorId, appointmentId) => {
 exports.reviewCase = async (doctorId, data) => {
   const {
     appointment_id,
-    diagnosis,
-    prescription,
-    notes
+    diagnosis
   } = data;
 
   const medical_syndicate_id_card = doctorId;
@@ -178,8 +176,6 @@ exports.reviewCase = async (doctorId, data) => {
   }
 
   const MAX_DIAGNOSIS_LENGTH = 5000;
-  const MAX_PRESCRIPTION_LENGTH = 3000;
-  const MAX_NOTES_LENGTH = 3000;
 
   if (typeof diagnosis !== 'string' || diagnosis.trim().length === 0) {
     const err = new Error("diagnosis must be a non-empty string");
@@ -188,16 +184,6 @@ exports.reviewCase = async (doctorId, data) => {
   }
   if (diagnosis.length > MAX_DIAGNOSIS_LENGTH) {
     const err = new Error(`diagnosis must not exceed ${MAX_DIAGNOSIS_LENGTH} characters`);
-    err.status = 400;
-    throw err;
-  }
-  if (prescription && typeof prescription === 'string' && prescription.length > MAX_PRESCRIPTION_LENGTH) {
-    const err = new Error(`prescription must not exceed ${MAX_PRESCRIPTION_LENGTH} characters`);
-    err.status = 400;
-    throw err;
-  }
-  if (notes && typeof notes === 'string' && notes.length > MAX_NOTES_LENGTH) {
-    const err = new Error(`notes must not exceed ${MAX_NOTES_LENGTH} characters`);
     err.status = 400;
     throw err;
   }
@@ -242,16 +228,14 @@ exports.reviewCase = async (doctorId, data) => {
 
     await client.query(`
       INSERT INTO report
-      (report_id, appointment_id, patient_id, medical_syndicate_id_card, diagnosis, prescription, notes)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      (report_id, appointment_id, patient_id, medical_syndicate_id_card, diagnosis)
+      VALUES ($1, $2, $3, $4, $5)
     `, [
       reportId,
       appointment_id,
       caseData.patient_id,
       medical_syndicate_id_card,
-      diagnosis.trim(),
-      prescription ? prescription.trim() : null,
-      notes ? notes.trim() : null
+      diagnosis.trim()
     ]);
 
     // Update appointment status to completed
@@ -271,7 +255,7 @@ exports.reviewCase = async (doctorId, data) => {
 
       // Send auto-generated report summary to chat
       const autoMessageId = uuidv4();
-      const autoText = `📋 Report submitted:\n\nDiagnosis: ${diagnosis.trim()}${prescription ? `\nPrescription: ${prescription.trim()}` : ''}${notes ? `\nNotes: ${notes.trim()}` : ''}`;
+      const autoText = `📋 Report submitted:\n\n${diagnosis.trim()}`;
 
       await client.query(
         `INSERT INTO chat_message (message_id, chat_id, sender_role, sender_id, message_text, message_type, sent_at)
@@ -316,9 +300,7 @@ exports.reviewCase = async (doctorId, data) => {
 exports.updateReport = async (doctorId, data) => {
   const {
     appointment_id,
-    diagnosis,
-    prescription,
-    notes
+    diagnosis
   } = data;
 
   const medical_syndicate_id_card = doctorId;
@@ -337,8 +319,6 @@ exports.updateReport = async (doctorId, data) => {
   }
 
   const MAX_DIAGNOSIS_LENGTH = 5000;
-  const MAX_PRESCRIPTION_LENGTH = 3000;
-  const MAX_NOTES_LENGTH = 3000;
 
   if (typeof diagnosis !== 'string' || diagnosis.trim().length === 0) {
     const err = new Error("diagnosis must be a non-empty string");
@@ -347,16 +327,6 @@ exports.updateReport = async (doctorId, data) => {
   }
   if (diagnosis.length > MAX_DIAGNOSIS_LENGTH) {
     const err = new Error(`diagnosis must not exceed ${MAX_DIAGNOSIS_LENGTH} characters`);
-    err.status = 400;
-    throw err;
-  }
-  if (prescription && typeof prescription === 'string' && prescription.length > MAX_PRESCRIPTION_LENGTH) {
-    const err = new Error(`prescription must not exceed ${MAX_PRESCRIPTION_LENGTH} characters`);
-    err.status = 400;
-    throw err;
-  }
-  if (notes && typeof notes === 'string' && notes.length > MAX_NOTES_LENGTH) {
-    const err = new Error(`notes must not exceed ${MAX_NOTES_LENGTH} characters`);
     err.status = 400;
     throw err;
   }
@@ -383,12 +353,10 @@ exports.updateReport = async (doctorId, data) => {
     // Update report
     await client.query(
       `UPDATE report
-       SET diagnosis = $1, prescription = $2, notes = $3
-       WHERE appointment_id = $4 AND medical_syndicate_id_card = $5`,
+       SET diagnosis = $1
+       WHERE appointment_id = $2 AND medical_syndicate_id_card = $3`,
       [
         diagnosis.trim(),
-        prescription ? prescription.trim() : null,
-        notes ? notes.trim() : null,
         appointment_id,
         medical_syndicate_id_card
       ]
@@ -403,7 +371,7 @@ exports.updateReport = async (doctorId, data) => {
     if (chatResult.rows.length > 0) {
       const chatId = chatResult.rows[0].chat_id;
       const autoMessageId = uuidv4();
-      const autoText = `📋 Report updated:\n\nDiagnosis: ${diagnosis.trim()}${prescription ? `\nPrescription: ${prescription.trim()}` : ''}${notes ? `\nNotes: ${notes.trim()}` : ''}`;
+      const autoText = `📋 Report updated:\n\n${diagnosis.trim()}`;
 
       await client.query(
         `INSERT INTO chat_message (message_id, chat_id, sender_role, sender_id, message_text, message_type, sent_at)

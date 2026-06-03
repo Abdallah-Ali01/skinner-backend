@@ -79,7 +79,7 @@ router.get("/my", verifyToken, allowRoles("patient", "doctor"), appointmentContr
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: All reports with doctor diagnosis, prescription, and notes
+ *         description: All reports with doctor diagnosis
  */
 router.get("/my-reports", verifyToken, allowRoles("patient"), appointmentController.getMyReports);
 
@@ -99,7 +99,7 @@ router.get("/my-reports", verifyToken, allowRoles("patient"), appointmentControl
  *           type: string
  *     responses:
  *       200:
- *         description: Full report details (diagnosis, prescription, notes, analysis data)
+ *         description: Full report details (diagnosis, analysis data)
  *       403:
  *         description: Access denied
  *       404:

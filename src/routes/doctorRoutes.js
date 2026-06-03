@@ -27,12 +27,6 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
  *         diagnosis:
  *           type: string
  *           example: Likely HFMD. Patient should follow up clinically.
- *         prescription:
- *           type: string
- *           example: Apply topical cream twice daily for 2 weeks
- *         notes:
- *           type: string
- *           example: Follow up in 2 weeks if no improvement
  */
 
 /**
