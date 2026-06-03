@@ -15,6 +15,9 @@ module.exports = (io) => {
   });
 
   io.on("connection", (socket) => {
+    // Join personal room for real-time notification updates outside the active chat
+    socket.join(socket.user.id);
+
     socket.on("join_chat", async ({ chat_id }) => {
       try {
         const access = await chatService.checkAccess(chat_id, socket.user.id, socket.user.role);
@@ -49,6 +52,22 @@ module.exports = (io) => {
         });
 
         io.to(chat_id).emit("new_message", { success: true, data: message });
+
+        // Emit unread update to the recipient's personal room
+        try {
+          const chatInfo = await chatService.getChatStatus(chat_id);
+          if (chatInfo) {
+            const recipientId = socket.user.role === 'patient' ? chatInfo.medical_syndicate_id_card : chatInfo.patient_id;
+            io.to(recipientId).emit("unread_update", {
+              chat_id,
+              sender_id: socket.user.id,
+              sender_role: socket.user.role,
+              message
+            });
+          }
+        } catch (err) {
+          console.error("Failed to emit unread_update:", err);
+        }
       } catch (error) {
         socket.emit("chat_error", { message: error.message });
       }

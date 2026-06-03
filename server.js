@@ -20,6 +20,8 @@ const io = new Server(server, {
   }
 });
 
+app.set("io", io);
+
 require("./src/socket/chatSocket")(io);
 
 const PORT = process.env.PORT || 5000;

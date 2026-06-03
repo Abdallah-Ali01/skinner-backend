@@ -58,6 +58,27 @@ exports.sendMessage = async (req, res) => {
       sender_role: req.user.role
     });
 
+    // Broadcast via socket.io
+    const io = req.app.get("io");
+    if (io) {
+      io.to(chat_id).emit("new_message", { success: true, data: message });
+
+      try {
+        const chatInfo = await chatService.getChatStatus(chat_id);
+        if (chatInfo) {
+          const recipientId = req.user.role === 'patient' ? chatInfo.medical_syndicate_id_card : chatInfo.patient_id;
+          io.to(recipientId).emit("unread_update", {
+            chat_id,
+            sender_id: req.user.id,
+            sender_role: req.user.role,
+            message
+          });
+        }
+      } catch (err) {
+        console.error("Failed to emit HTTP-triggered unread_update:", err);
+      }
+    }
+
     res.status(201).json({ success: true, data: message });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
