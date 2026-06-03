@@ -88,14 +88,17 @@ exports.sendMessage = async (req, res) => {
 exports.getMessagesByChatId = async (req, res) => {
   try {
     const { chatId } = req.params;
+    const { peek } = req.query;
     const access = await chatService.checkAccess(chatId, req.user.id, req.user.role);
     
     if (!access.allowed) {
       return res.status(403).json({ success: false, message: "Access denied" });
     }
 
-    // Automatically mark all received messages in this chat as read
-    await chatService.markChatAsRead(chatId, req.user.role);
+    if (peek !== "true") {
+      // Automatically mark all received messages in this chat as read
+      await chatService.markChatAsRead(chatId, req.user.role);
+    }
 
     const messages = await chatService.getMessagesByChatId(chatId);
     res.status(200).json({ success: true, data: messages, chat_status: access.status });

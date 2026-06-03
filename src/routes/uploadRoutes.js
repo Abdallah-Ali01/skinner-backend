@@ -4,7 +4,58 @@ const upload = require("../middlewares/uploadMiddleware");
 const { verifyToken } = require("../middlewares/authMiddleware");
 const { allowRoles } = require("../middlewares/roleMiddleware");
 
-// POST /api/upload/chat
+/**
+ * @swagger
+ * tags:
+ *   name: Upload
+ *   description: File upload APIs
+ */
+
+/**
+ * @swagger
+ * /api/upload/chat:
+ *   post:
+ *     summary: Upload a file for chat (image or document)
+ *     tags: [Upload]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Image (JPG/PNG) or document (PDF) to upload (Max 5MB)
+ *     responses:
+ *       200:
+ *         description: File uploaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 url:
+ *                   type: string
+ *                   example: "https://example.com/uploads/chat/1234567890.jpg"
+ *                 type:
+ *                   type: string
+ *                   example: "image/jpeg"
+ *       400:
+ *         description: No file uploaded
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 router.post("/chat", verifyToken, allowRoles("patient", "doctor"), upload.single("file"), (req, res) => {
   try {
     if (!req.file) {
