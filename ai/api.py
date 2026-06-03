@@ -134,7 +134,7 @@ async def predict(file: UploadFile = File(...)):
     tensor = preprocess_image(image_bytes)
 
     preds = model.predict(tensor, verbose=0)[0]          # shape: (15,)
-    top_indices = np.argsort(preds)[::-1][:3]             # top 3
+    top_indices = np.argsort(preds)[::-1][:4]             # top 4 (primary + 3 alternatives)
 
     top_k = [
         TopKItem(label=CLASSES[int(i)], confidence=round(float(preds[int(i)]), 4))
