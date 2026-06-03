@@ -61,7 +61,15 @@ const chatService = {
             WHERE cm.chat_id = c.chat_id
             ORDER BY cm.sent_at DESC
             LIMIT 1
-          ) AS last_message
+          ) AS last_message,
+          (
+            SELECT r.diagnosis
+            FROM report r
+            WHERE r.patient_id = c.patient_id
+              AND r.medical_syndicate_id_card = c.medical_syndicate_id_card
+            ORDER BY r.created_at DESC
+            LIMIT 1
+          ) AS diagnosis
         FROM chat c
         JOIN doctor d ON c.medical_syndicate_id_card = d.medical_syndicate_id_card
         WHERE c.patient_id = $1
@@ -93,7 +101,15 @@ const chatService = {
             WHERE cm.chat_id = c.chat_id
             ORDER BY cm.sent_at DESC
             LIMIT 1
-          ) AS last_message
+          ) AS last_message,
+          (
+            SELECT r.diagnosis
+            FROM report r
+            WHERE r.patient_id = c.patient_id
+              AND r.medical_syndicate_id_card = c.medical_syndicate_id_card
+            ORDER BY r.created_at DESC
+            LIMIT 1
+          ) AS diagnosis
         FROM chat c
         JOIN patient p ON c.patient_id = p.patient_id
         WHERE c.medical_syndicate_id_card = $1
@@ -129,14 +145,25 @@ const chatService = {
   },
 
   async markChatAsRead(chatId, userRole) {
-    await pool.query(
-      `UPDATE chat_message 
-       SET is_read = TRUE 
-       WHERE chat_id = $1 
-         AND sender_role != $2 
-         AND is_read = FALSE`,
-      [chatId, userRole]
-    );
+    if (userRole === "doctor") {
+      await pool.query(
+        `UPDATE chat_message 
+         SET is_read = TRUE 
+         WHERE chat_id = $1 
+           AND sender_role = 'patient' 
+           AND is_read = FALSE`,
+        [chatId]
+      );
+    } else if (userRole === "patient") {
+      await pool.query(
+        `UPDATE chat_message 
+         SET is_read = TRUE 
+         WHERE chat_id = $1 
+           AND (sender_role = 'doctor' OR sender_role = 'system') 
+           AND is_read = FALSE`,
+        [chatId]
+      );
+    }
   }
 };
 

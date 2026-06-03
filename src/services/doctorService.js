@@ -397,6 +397,12 @@ exports.updateReport = async (doctorId, data) => {
         [autoMessageId, chatId, medical_syndicate_id_card, autoText]
       );
 
+      // Update chat updated_at timestamp to bubble up the conversation
+      await client.query(
+        `UPDATE chat SET updated_at = NOW() WHERE chat_id = $1`,
+        [chatId]
+      );
+
       chatMessage = {
         id: autoMessageId,
         message_id: autoMessageId,
