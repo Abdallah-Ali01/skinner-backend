@@ -7,27 +7,74 @@ const chatService = {
   async checkAccess(chatId, userId, role) {
     let query;
     if (role === "patient") {
-      query = `SELECT chat_id, status FROM chat WHERE chat_id = $1 AND patient_id = $2`;
+      query = `
+        SELECT c.chat_id, c.status, a.date AS appointment_date
+        FROM chat c
+        LEFT JOIN appointment a ON c.appointment_id = a.appointment_id
+        WHERE c.chat_id = $1 AND c.patient_id = $2`;
     } else if (role === "doctor") {
-      query = `SELECT chat_id, status FROM chat WHERE chat_id = $1 AND medical_syndicate_id_card = $2`;
+      query = `
+        SELECT c.chat_id, c.status, a.date AS appointment_date
+        FROM chat c
+        LEFT JOIN appointment a ON c.appointment_id = a.appointment_id
+        WHERE c.chat_id = $1 AND c.medical_syndicate_id_card = $2`;
     } else {
       return { allowed: false };
     }
 
     const result = await pool.query(query, [chatId, userId]);
     if (result.rows.length === 0) return { allowed: false };
-    return { allowed: true, status: result.rows[0].status };
+    
+    const row = result.rows[0];
+    let status = row.status;
+    let remaining_seconds = null;
+    let follow_up_ends_at = null;
+    
+    if (row.appointment_date) {
+      const followUpDays = parseInt(process.env.CHAT_FOLLOWUP_DAYS || "7", 10);
+      const apptDate = new Date(row.appointment_date);
+      const endsAt = new Date(apptDate.getTime() + followUpDays * 24 * 60 * 60 * 1000);
+      remaining_seconds = Math.max(0, Math.floor((endsAt - new Date()) / 1000));
+      follow_up_ends_at = endsAt.toISOString();
+      if (status === 'active' && remaining_seconds === 0) {
+        status = 'locked';
+      }
+    }
+    
+    return { allowed: true, status, remaining_seconds, follow_up_ends_at };
   },
 
   // Get chat info + status for a specific chat
   async getChatStatus(chatId) {
     const result = await pool.query(
-      `SELECT chat_id, status, patient_id, medical_syndicate_id_card, appointment_id, updated_at
-       FROM chat WHERE chat_id = $1`,
+      `SELECT c.chat_id, c.status, c.patient_id, c.medical_syndicate_id_card, c.appointment_id, c.updated_at, a.date AS appointment_date
+       FROM chat c
+       LEFT JOIN appointment a ON c.appointment_id = a.appointment_id
+       WHERE c.chat_id = $1`,
       [chatId]
     );
     if (result.rows.length === 0) return null;
-    return result.rows[0];
+    
+    const row = result.rows[0];
+    
+    // Calculate follow-up countdown details
+    const followUpDays = parseInt(process.env.CHAT_FOLLOWUP_DAYS || "7", 10);
+    if (row.appointment_date) {
+      const apptDate = new Date(row.appointment_date);
+      const endsAt = new Date(apptDate.getTime() + followUpDays * 24 * 60 * 60 * 1000);
+      const remainingSeconds = Math.max(0, Math.floor((endsAt - new Date()) / 1000));
+      
+      row.follow_up_ends_at = endsAt.toISOString();
+      row.remaining_seconds = remainingSeconds;
+      if (row.status === 'active' && remainingSeconds === 0) {
+        row.status = 'locked';
+      }
+    } else {
+      row.follow_up_ends_at = null;
+      row.remaining_seconds = null;
+    }
+    
+    return row;
   },
 
   // List all chats for a user with doctor/patient name and last message preview
@@ -43,6 +90,7 @@ const chatService = {
           c.updated_at,
           d.name AS doctor_name,
           d.specialization,
+          a.date AS appointment_date,
           (
             SELECT COUNT(*)::integer
             FROM chat_message cm2
@@ -72,6 +120,7 @@ const chatService = {
           ) AS diagnosis
         FROM chat c
         JOIN doctor d ON c.medical_syndicate_id_card = d.medical_syndicate_id_card
+        LEFT JOIN appointment a ON c.appointment_id = a.appointment_id
         WHERE c.patient_id = $1
         ORDER BY c.updated_at DESC`;
     } else if (role === "doctor") {
@@ -83,6 +132,7 @@ const chatService = {
           c.updated_at,
           p.name AS patient_name,
           p.email AS patient_email,
+          a.date AS appointment_date,
           (
             SELECT COUNT(*)::integer
             FROM chat_message cm2
@@ -112,6 +162,7 @@ const chatService = {
           ) AS diagnosis
         FROM chat c
         JOIN patient p ON c.patient_id = p.patient_id
+        LEFT JOIN appointment a ON c.appointment_id = a.appointment_id
         WHERE c.medical_syndicate_id_card = $1
         ORDER BY c.updated_at DESC`;
     } else {
@@ -119,10 +170,29 @@ const chatService = {
     }
 
     const result = await pool.query(query, [userId]);
+    const followUpDays = parseInt(process.env.CHAT_FOLLOWUP_DAYS || "7", 10);
+    const mappedRows = result.rows.map((row) => {
+      if (row.appointment_date) {
+        const apptDate = new Date(row.appointment_date);
+        const endsAt = new Date(apptDate.getTime() + followUpDays * 24 * 60 * 60 * 1000);
+        const remainingSeconds = Math.max(0, Math.floor((endsAt - new Date()) / 1000));
+        
+        row.follow_up_ends_at = endsAt.toISOString();
+        row.remaining_seconds = remainingSeconds;
+        if (row.status === 'active' && remainingSeconds === 0) {
+          row.status = 'locked';
+        }
+      } else {
+        row.follow_up_ends_at = null;
+        row.remaining_seconds = null;
+      }
+      return row;
+    });
+
     return {
       success: true,
-      count: result.rows.length,
-      data: result.rows
+      count: mappedRows.length,
+      data: mappedRows
     };
   },
 

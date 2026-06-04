@@ -101,7 +101,13 @@ exports.getMessagesByChatId = async (req, res) => {
     }
 
     const messages = await chatService.getMessagesByChatId(chatId);
-    res.status(200).json({ success: true, data: messages, chat_status: access.status });
+    res.status(200).json({ 
+      success: true, 
+      data: messages, 
+      chat_status: access.status,
+      remaining_seconds: access.remaining_seconds,
+      follow_up_ends_at: access.follow_up_ends_at
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

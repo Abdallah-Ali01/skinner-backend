@@ -36,17 +36,36 @@ exports.getPendingCases = async (doctorId) => {
     JOIN payment pay ON a.appointment_id = pay.appointment_id
     LEFT JOIN chat c ON a.patient_id = c.patient_id
       AND a.medical_syndicate_id_card = c.medical_syndicate_id_card
-    LEFT JOIN report r ON a.appointment_id = r.appointment_id
     WHERE a.medical_syndicate_id_card = $1
       AND pay.payment_status = 'paid'
-      AND r.appointment_id IS NULL
-    ORDER BY a.date DESC
+      AND a.date > NOW()
+      AND a.status != 'cancelled'
+    ORDER BY a.date ASC
   `, [doctorId]);
+
+  const followUpDays = parseInt(process.env.CHAT_FOLLOWUP_DAYS || "7", 10);
+  const mappedRows = result.rows.map((row) => {
+    if (row.appointment_date) {
+      const apptDate = new Date(row.appointment_date);
+      const endsAt = new Date(apptDate.getTime() + followUpDays * 24 * 60 * 60 * 1000);
+      const remainingSeconds = Math.max(0, Math.floor((endsAt - new Date()) / 1000));
+      
+      row.follow_up_ends_at = endsAt.toISOString();
+      row.remaining_seconds = remainingSeconds;
+      if (row.chat_status === 'active' && remainingSeconds === 0) {
+        row.chat_status = 'locked';
+      }
+    } else {
+      row.follow_up_ends_at = null;
+      row.remaining_seconds = null;
+    }
+    return row;
+  });
 
   return {
     success: true,
-    count: result.rows.length,
-    data: result.rows
+    count: mappedRows.length,
+    data: mappedRows
   };
 };
 
@@ -57,7 +76,7 @@ exports.getReviewedCases = async (doctorId) => {
       r.diagnosis AS report_diagnosis,
       r.prescription AS report_prescription,
       r.notes AS report_notes,
-      r.created_at AS date,
+      COALESCE(r.created_at, a.date) AS date,
       a.appointment_id,
       a.analysis_id,
       a.patient_id,
@@ -83,21 +102,44 @@ exports.getReviewedCases = async (doctorId) => {
           AND cm2.sender_role != 'doctor'
           AND cm2.is_read = FALSE
       ) AS unread_count
-    FROM report r
-    JOIN appointment a ON r.appointment_id = a.appointment_id
-    JOIN patient p ON r.patient_id = p.patient_id
-    JOIN doctor d ON r.medical_syndicate_id_card = d.medical_syndicate_id_card
+    FROM appointment a
+    JOIN patient p ON a.patient_id = p.patient_id
     JOIN analysis an ON a.analysis_id = an.analysis_id
+    JOIN payment pay ON a.appointment_id = pay.appointment_id
+    JOIN doctor d ON a.medical_syndicate_id_card = d.medical_syndicate_id_card
     LEFT JOIN chat c ON a.patient_id = c.patient_id
       AND a.medical_syndicate_id_card = c.medical_syndicate_id_card
-    WHERE r.medical_syndicate_id_card = $1
-    ORDER BY r.created_at DESC
+    LEFT JOIN report r ON a.appointment_id = r.appointment_id
+    WHERE a.medical_syndicate_id_card = $1
+      AND pay.payment_status = 'paid'
+      AND a.date <= NOW()
+      AND a.status != 'cancelled'
+    ORDER BY a.date DESC
   `, [doctorId]);
+
+  const followUpDays = parseInt(process.env.CHAT_FOLLOWUP_DAYS || "7", 10);
+  const mappedRows = result.rows.map((row) => {
+    if (row.appointment_date) {
+      const apptDate = new Date(row.appointment_date);
+      const endsAt = new Date(apptDate.getTime() + followUpDays * 24 * 60 * 60 * 1000);
+      const remainingSeconds = Math.max(0, Math.floor((endsAt - new Date()) / 1000));
+      
+      row.follow_up_ends_at = endsAt.toISOString();
+      row.remaining_seconds = remainingSeconds;
+      if (row.chat_status === 'active' && remainingSeconds === 0) {
+        row.chat_status = 'locked';
+      }
+    } else {
+      row.follow_up_ends_at = null;
+      row.remaining_seconds = null;
+    }
+    return row;
+  });
 
   return {
     success: true,
-    count: result.rows.length,
-    data: result.rows
+    count: mappedRows.length,
+    data: mappedRows
   };
 };
 
@@ -148,9 +190,26 @@ exports.getCaseDetails = async (doctorId, appointmentId) => {
     throw err;
   }
 
+  const row = result.rows[0];
+  const followUpDays = parseInt(process.env.CHAT_FOLLOWUP_DAYS || "7", 10);
+  if (row.appointment_date) {
+    const apptDate = new Date(row.appointment_date);
+    const endsAt = new Date(apptDate.getTime() + followUpDays * 24 * 60 * 60 * 1000);
+    const remainingSeconds = Math.max(0, Math.floor((endsAt - new Date()) / 1000));
+    
+    row.follow_up_ends_at = endsAt.toISOString();
+    row.remaining_seconds = remainingSeconds;
+    if (row.chat_status === 'active' && remainingSeconds === 0) {
+      row.chat_status = 'locked';
+    }
+  } else {
+    row.follow_up_ends_at = null;
+    row.remaining_seconds = null;
+  }
+
   return {
     success: true,
-    data: result.rows[0]
+    data: row
   };
 };
 
@@ -238,13 +297,7 @@ exports.reviewCase = async (doctorId, data) => {
       diagnosis.trim()
     ]);
 
-    // Update appointment status to completed
-    await client.query(
-      `UPDATE appointment SET status = 'completed' WHERE appointment_id = $1`,
-      [appointment_id]
-    );
-
-    // Auto-message + lock chat after report submission
+    // Auto-message after report submission
     const chatResult = await client.query(
       `SELECT chat_id FROM chat WHERE patient_id = $1 AND medical_syndicate_id_card = $2`,
       [caseData.patient_id, medical_syndicate_id_card]
@@ -263,12 +316,6 @@ exports.reviewCase = async (doctorId, data) => {
         `INSERT INTO chat_message (message_id, chat_id, sender_role, sender_id, message_text, message_type, sent_at)
          VALUES ($1, $2, 'system', $3, $4, 'system', NOW())`,
         [autoMessageId, chatId, medical_syndicate_id_card, autoText]
-      );
-
-      // Lock the chat — patient can still read but can't send until new appointment
-      await client.query(
-        `UPDATE chat SET status = 'locked', updated_at = NOW() WHERE chat_id = $1`,
-        [chatId]
       );
 
       chatMessage = {
