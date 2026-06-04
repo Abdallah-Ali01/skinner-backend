@@ -209,9 +209,11 @@ exports.getMyAppointments = async (userId, role) => {
         a.appointment_id, a.patient_id, a.doctor_name, a.total_cost,
         a.date, a.status, a.medical_syndicate_id_card, a.analysis_id,
         an.skin_disease_classification, an.skin_image_upload,
-        c.chat_id, c.status AS chat_status
+        c.chat_id, c.status AS chat_status,
+        d.phone AS doctor_phone, d.clinic_address AS doctor_address, d.email AS doctor_email
       FROM appointment a
       LEFT JOIN analysis an ON a.analysis_id = an.analysis_id
+      LEFT JOIN doctor d ON a.medical_syndicate_id_card = d.medical_syndicate_id_card
       LEFT JOIN chat c ON a.patient_id = c.patient_id
         AND a.medical_syndicate_id_card = c.medical_syndicate_id_card
       WHERE a.patient_id = $1
