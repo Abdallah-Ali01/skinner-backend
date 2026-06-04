@@ -185,21 +185,52 @@ exports.generateAdminCode = async (adminId) => {
     throw err;
   }
 
+  // Check if there is an existing unused code created by this admin in the last 24 hours
+  const existingCodeRes = await pool.query(
+    `
+    SELECT invite_code, created_at FROM admin_invite_code
+    WHERE created_by_admin_id = $1
+      AND is_used = FALSE
+      AND created_at > NOW() - INTERVAL '24 hours'
+    ORDER BY created_at DESC
+    LIMIT 1
+    `,
+    [adminId]
+  );
+
+  if (existingCodeRes.rows.length > 0) {
+    const existing = existingCodeRes.rows[0];
+    const expiresAt = new Date(new Date(existing.created_at).getTime() + 24 * 60 * 60 * 1000);
+    return {
+      success: true,
+      message: "Active admin invite code retrieved successfully",
+      data: {
+        invite_code: existing.invite_code,
+        expires_at: expiresAt.toISOString()
+      }
+    };
+  }
+
   const inviteCode = "ADM-" + crypto.randomBytes(4).toString("hex").toUpperCase();
 
-  await pool.query(
+  const insertResult = await pool.query(
     `
     INSERT INTO admin_invite_code (invite_code, created_by_admin_id)
     VALUES ($1, $2)
+    RETURNING created_at
     `,
     [inviteCode, adminId]
   );
+
+  const createdAt = insertResult.rows[0].created_at;
+  const expiresAt = new Date(new Date(createdAt).getTime() + 24 * 60 * 60 * 1000);
 
   return {
     success: true,
     message: "Admin invite code generated successfully",
     data: {
-      invite_code: inviteCode
+      invite_code: inviteCode,
+      expires_at: expiresAt.toISOString()
     }
   };
 };

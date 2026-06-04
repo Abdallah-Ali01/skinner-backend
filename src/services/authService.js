@@ -366,6 +366,13 @@ exports.registerAdmin = async (data) => {
     throw err;
   }
 
+  const isExpired = new Date() - new Date(invite.created_at) > 24 * 60 * 60 * 1000;
+  if (isExpired) {
+    const err = new Error("Invite code has expired");
+    err.status = 400;
+    throw err;
+  }
+
   const hashedPassword = await bcrypt.hash(password, 10);
   const adminId = uuidv4();
 
