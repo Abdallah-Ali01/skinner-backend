@@ -185,13 +185,13 @@ exports.generateAdminCode = async (adminId) => {
     throw err;
   }
 
-  // Check if there is an existing unused code created by this admin in the last 24 hours
+  // Check if there is an existing unused code created by this admin in the last 1 hour
   const existingCodeRes = await pool.query(
     `
     SELECT invite_code, created_at FROM admin_invite_code
     WHERE created_by_admin_id = $1
       AND is_used = FALSE
-      AND created_at > NOW() - INTERVAL '24 hours'
+      AND created_at > NOW() - INTERVAL '1 hour'
     ORDER BY created_at DESC
     LIMIT 1
     `,
@@ -200,7 +200,7 @@ exports.generateAdminCode = async (adminId) => {
 
   if (existingCodeRes.rows.length > 0) {
     const existing = existingCodeRes.rows[0];
-    const expiresAt = new Date(new Date(existing.created_at).getTime() + 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(new Date(existing.created_at).getTime() + 1 * 60 * 60 * 1000);
     return {
       success: true,
       message: "Active admin invite code retrieved successfully",
@@ -223,7 +223,7 @@ exports.generateAdminCode = async (adminId) => {
   );
 
   const createdAt = insertResult.rows[0].created_at;
-  const expiresAt = new Date(new Date(createdAt).getTime() + 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(new Date(createdAt).getTime() + 1 * 60 * 60 * 1000);
 
   return {
     success: true,
