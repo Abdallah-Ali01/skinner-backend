@@ -54,19 +54,18 @@ exports.bookAppointment = async (patientId, data) => {
     throw err;
   }
 
-  // Block booking if the patient has an unreviewed appointment with this doctor
-  const unreviewedWithDoctor = await pool.query(`
+  // Block booking if the patient has an upcoming appointment with this doctor that hasn't arrived yet
+  const upcomingWithDoctor = await pool.query(`
     SELECT a.appointment_id
     FROM appointment a
-    LEFT JOIN report r ON a.appointment_id = r.appointment_id
     WHERE a.patient_id = $1
       AND a.medical_syndicate_id_card = $2
       AND a.status != 'cancelled'
-      AND r.appointment_id IS NULL
+      AND a.date > NOW()
   `, [patientId, medical_syndicate_id_card]);
 
-  if (unreviewedWithDoctor.rows.length > 0) {
-    const err = new Error("You already have a pending appointment with this doctor that hasn't been reviewed yet");
+  if (upcomingWithDoctor.rows.length > 0) {
+    const err = new Error("You already have an upcoming appointment scheduled with this doctor");
     err.status = 409;
     throw err;
   }
@@ -151,6 +150,23 @@ exports.bookAppointment = async (patientId, data) => {
 
   if (conflictCheck.rows.length > 0) {
     const err = new Error("This time slot is already booked");
+    err.status = 409;
+    throw err;
+  }
+
+  // Check for double-booking on same patient + date + time
+  const patientConflictCheck = await pool.query(
+    `SELECT 1 FROM appointment
+     WHERE patient_id = $1
+       AND date::date = $2::date
+       AND EXTRACT(HOUR FROM date) = $3
+       AND EXTRACT(MINUTE FROM date) = $4
+       AND status != 'cancelled'`,
+    [patientId, dateStr, apptH, apptM]
+  );
+
+  if (patientConflictCheck.rows.length > 0) {
+    const err = new Error("You already have an appointment booked with another doctor at this date and time");
     err.status = 409;
     throw err;
   }
