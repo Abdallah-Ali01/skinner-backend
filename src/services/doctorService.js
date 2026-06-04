@@ -26,7 +26,7 @@ exports.getPendingCases = async (doctorId) => {
         SELECT COUNT(*)::integer
         FROM chat_message cm2
         WHERE cm2.chat_id = c.chat_id
-          AND cm2.sender_role != 'doctor'
+          AND cm2.sender_role = 'patient'
           AND cm2.is_read = FALSE
       ) AS unread_count,
       pay.payment_status
@@ -97,7 +97,7 @@ exports.getReviewedCases = async (doctorId) => {
         SELECT COUNT(*)::integer
         FROM chat_message cm2
         WHERE cm2.chat_id = c.chat_id
-          AND cm2.sender_role != 'doctor'
+          AND cm2.sender_role = 'patient'
           AND cm2.is_read = FALSE
       ) AS unread_count
     FROM appointment a
@@ -165,7 +165,7 @@ exports.getCaseDetails = async (doctorId, appointmentId) => {
         SELECT COUNT(*)::integer
         FROM chat_message cm2
         WHERE cm2.chat_id = c.chat_id
-          AND cm2.sender_role != 'doctor'
+          AND cm2.sender_role = 'patient'
           AND cm2.is_read = FALSE
       ) AS unread_count,
       pay.payment_status
