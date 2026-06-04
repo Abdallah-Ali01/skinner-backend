@@ -118,6 +118,22 @@ router.get("/reports", verifyToken, allowRoles("admin"), adminController.getRepo
  *         description: Only super admin can perform this action
  */
 router.post("/generate-admin-code", verifyToken, allowRoles("admin"), superAdminOnly, adminController.generateAdminCode);
+
+/**
+ * @swagger
+ * /api/admin/active-invite-code:
+ *   get:
+ *     summary: Retrieve the current active, unused and unexpired admin invite code (super admin only)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Active invite code details (or null if none active)
+ *       403:
+ *         description: Only super admin can perform this action
+ */
+router.get("/active-invite-code", verifyToken, allowRoles("admin"), superAdminOnly, adminController.getActiveInviteCode);
 /**
  * @swagger
  * /api/admin/stats:

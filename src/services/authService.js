@@ -366,7 +366,7 @@ exports.registerAdmin = async (data) => {
     throw err;
   }
 
-  const isExpired = new Date() - new Date(invite.created_at) > 1 * 60 * 60 * 1000;
+  const isExpired = new Date() - new Date(invite.created_at) > 15 * 60 * 1000;
   if (isExpired) {
     const err = new Error("Invite code has expired");
     err.status = 400;

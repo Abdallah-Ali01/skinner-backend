@@ -185,22 +185,20 @@ exports.generateAdminCode = async (adminId) => {
     throw err;
   }
 
-  // Check if there is an existing unused code created by this admin in the last 1 hour
+  // Check if there is an existing unused active invite code in the last 15 minutes
   const existingCodeRes = await pool.query(
     `
     SELECT invite_code, created_at FROM admin_invite_code
-    WHERE created_by_admin_id = $1
-      AND is_used = FALSE
-      AND created_at > NOW() - INTERVAL '1 hour'
+    WHERE is_used = FALSE
+      AND created_at > NOW() - INTERVAL '15 minutes'
     ORDER BY created_at DESC
     LIMIT 1
-    `,
-    [adminId]
+    `
   );
 
   if (existingCodeRes.rows.length > 0) {
     const existing = existingCodeRes.rows[0];
-    const expiresAt = new Date(new Date(existing.created_at).getTime() + 1 * 60 * 60 * 1000);
+    const expiresAt = new Date(new Date(existing.created_at).getTime() + 15 * 60 * 1000);
     return {
       success: true,
       message: "Active admin invite code retrieved successfully",
@@ -223,13 +221,54 @@ exports.generateAdminCode = async (adminId) => {
   );
 
   const createdAt = insertResult.rows[0].created_at;
-  const expiresAt = new Date(new Date(createdAt).getTime() + 1 * 60 * 60 * 1000);
+  const expiresAt = new Date(new Date(createdAt).getTime() + 15 * 60 * 1000);
 
   return {
     success: true,
     message: "Admin invite code generated successfully",
     data: {
       invite_code: inviteCode,
+      expires_at: expiresAt.toISOString()
+    }
+  };
+};
+
+exports.getActiveInviteCode = async (adminId) => {
+  const adminCheck = await pool.query(
+    `SELECT 1 FROM admin WHERE admin_id = $1`,
+    [adminId]
+  );
+
+  if (adminCheck.rows.length === 0) {
+    const err = new Error("Admin not found");
+    err.status = 404;
+    throw err;
+  }
+
+  const result = await pool.query(
+    `
+    SELECT invite_code, created_at FROM admin_invite_code
+    WHERE is_used = FALSE
+      AND created_at > NOW() - INTERVAL '15 minutes'
+    ORDER BY created_at DESC
+    LIMIT 1
+    `
+  );
+
+  if (result.rows.length === 0) {
+    return {
+      success: true,
+      data: null
+    };
+  }
+
+  const existing = result.rows[0];
+  const expiresAt = new Date(new Date(existing.created_at).getTime() + 15 * 60 * 1000);
+
+  return {
+    success: true,
+    data: {
+      invite_code: existing.invite_code,
       expires_at: expiresAt.toISOString()
     }
   };

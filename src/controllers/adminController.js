@@ -60,6 +60,18 @@ exports.generateAdminCode = async (req, res) => {
   }
 };
 
+exports.getActiveInviteCode = async (req, res) => {
+  try {
+    const result = await adminService.getActiveInviteCode(req.user.id);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 exports.getStats = async (req, res) => {
   try {
     const result = await adminService.getStats();
