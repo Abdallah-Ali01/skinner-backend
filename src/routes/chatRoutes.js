@@ -42,6 +42,13 @@ const upload = require("../middlewares/uploadMiddleware");
  *                         type: string
  *                       last_message:
  *                         type: object
+ *                       follow_up_ends_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: ISO timestamp when the follow-up period ends.
+ *                       remaining_seconds:
+ *                         type: integer
+ *                         description: Seconds remaining in follow-up period.
  *       500:
  *         description: Server error
  */

@@ -24,6 +24,10 @@ const superAdminOnly = require("../middlewares/superAdminMiddleware");
  *         medical_syndicate_id_card:
  *           type: string
  *           example: DOC-2001
+ *         notes:
+ *           type: string
+ *           description: Optional verification notes to send in the approval email.
+ *           example: "All credentials look correct. Welcome to Skinner!"
  *
  *     RejectDoctorRequest:
  *       type: object
@@ -33,6 +37,10 @@ const superAdminOnly = require("../middlewares/superAdminMiddleware");
  *         medical_syndicate_id_card:
  *           type: string
  *           example: DOC-3001
+ *         notes:
+ *           type: string
+ *           description: Optional notes explaining the reason for rejection, sent in the email.
+ *           example: "Your medical syndicate ID card document was blurry and unreadable. Please re-register."
  */
 
 /**
