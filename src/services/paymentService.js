@@ -179,7 +179,8 @@ exports.payAppointment = async (patientId, data) => {
       appointment_id,
       payment_status: "paid",
       transaction_reference: transactionReference,
-      chat_id: chatId
+      chat_id: chatId,
+      medical_syndicate_id_card: appointment.medical_syndicate_id_card
     }
   };
 };
