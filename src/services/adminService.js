@@ -2,6 +2,7 @@ const pool = require("../config/database");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const emailService = require("./emailService");
 
 exports.getPendingDoctors = async () => {
   const result = await pool.query(
@@ -33,7 +34,7 @@ exports.getPendingDoctors = async () => {
 };
 
 exports.approveDoctor = async (adminId, data) => {
-  const { medical_syndicate_id_card } = data;
+  const { medical_syndicate_id_card, notes } = data;
 
   if (!medical_syndicate_id_card) {
     const err = new Error("medical_syndicate_id_card is required");
@@ -53,7 +54,7 @@ exports.approveDoctor = async (adminId, data) => {
   }
 
   const doctorCheck = await pool.query(
-    `SELECT approval_status FROM doctor WHERE medical_syndicate_id_card = $1`,
+    `SELECT approval_status, email, name FROM doctor WHERE medical_syndicate_id_card = $1`,
     [medical_syndicate_id_card]
   );
 
@@ -80,6 +81,17 @@ exports.approveDoctor = async (adminId, data) => {
     [adminId, medical_syndicate_id_card]
   );
 
+  // Send email notification asynchronously so we don't delay the HTTP response
+  if (doctorCheck.rows[0].email) {
+    emailService.sendDoctorApprovalEmail({
+      to: doctorCheck.rows[0].email,
+      name: doctorCheck.rows[0].name,
+      notes: notes
+    }).catch((err) => {
+      console.error("Failed to send doctor approval email:", err);
+    });
+  }
+
   return {
     success: true,
     message: "Doctor approved successfully"
@@ -87,7 +99,7 @@ exports.approveDoctor = async (adminId, data) => {
 };
 
 exports.rejectDoctor = async (data) => {
-  const { medical_syndicate_id_card } = data;
+  const { medical_syndicate_id_card, notes } = data;
 
   if (!medical_syndicate_id_card) {
     const err = new Error("medical_syndicate_id_card is required");
@@ -96,7 +108,7 @@ exports.rejectDoctor = async (data) => {
   }
 
   const doctorCheck = await pool.query(
-    `SELECT approval_status, syndicate_card_image FROM doctor WHERE medical_syndicate_id_card = $1`,
+    `SELECT approval_status, syndicate_card_image, email, name FROM doctor WHERE medical_syndicate_id_card = $1`,
     [medical_syndicate_id_card]
   );
 
@@ -110,6 +122,17 @@ exports.rejectDoctor = async (data) => {
     const err = new Error(`Doctor is already ${doctorCheck.rows[0].approval_status}`);
     err.status = 409;
     throw err;
+  }
+
+  // Send email notification asynchronously before we delete the record
+  if (doctorCheck.rows[0].email) {
+    emailService.sendDoctorRejectionEmail({
+      to: doctorCheck.rows[0].email,
+      name: doctorCheck.rows[0].name,
+      notes: notes
+    }).catch((err) => {
+      console.error("Failed to send doctor rejection email:", err);
+    });
   }
 
   // Delete the doctor record entirely so they can register again
