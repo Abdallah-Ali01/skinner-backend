@@ -36,9 +36,7 @@ const chatService = {
       const endsAt = new Date(apptDate.getTime() + followUpDays * 24 * 60 * 60 * 1000);
       remaining_seconds = Math.max(0, Math.floor((endsAt - new Date()) / 1000));
       follow_up_ends_at = endsAt.toISOString();
-      if (status === 'active' && remaining_seconds === 0) {
-        status = 'locked';
-      }
+      status = remaining_seconds > 0 ? 'active' : 'locked';
     }
     
     return { allowed: true, status, remaining_seconds, follow_up_ends_at };
@@ -66,9 +64,7 @@ const chatService = {
       
       row.follow_up_ends_at = endsAt.toISOString();
       row.remaining_seconds = remainingSeconds;
-      if (row.status === 'active' && remainingSeconds === 0) {
-        row.status = 'locked';
-      }
+      row.status = remainingSeconds > 0 ? 'active' : 'locked';
     } else {
       row.follow_up_ends_at = null;
       row.remaining_seconds = null;
@@ -179,9 +175,7 @@ const chatService = {
         
         row.follow_up_ends_at = endsAt.toISOString();
         row.remaining_seconds = remainingSeconds;
-        if (row.status === 'active' && remainingSeconds === 0) {
-          row.status = 'locked';
-        }
+        row.status = remainingSeconds > 0 ? 'active' : 'locked';
       } else {
         row.follow_up_ends_at = null;
         row.remaining_seconds = null;

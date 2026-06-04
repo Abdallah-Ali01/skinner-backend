@@ -52,9 +52,7 @@ exports.getPendingCases = async (doctorId) => {
       
       row.follow_up_ends_at = endsAt.toISOString();
       row.remaining_seconds = remainingSeconds;
-      if (row.chat_status === 'active' && remainingSeconds === 0) {
-        row.chat_status = 'locked';
-      }
+      row.chat_status = remainingSeconds > 0 ? 'active' : 'locked';
     } else {
       row.follow_up_ends_at = null;
       row.remaining_seconds = null;
@@ -126,9 +124,7 @@ exports.getReviewedCases = async (doctorId) => {
       
       row.follow_up_ends_at = endsAt.toISOString();
       row.remaining_seconds = remainingSeconds;
-      if (row.chat_status === 'active' && remainingSeconds === 0) {
-        row.chat_status = 'locked';
-      }
+      row.chat_status = remainingSeconds > 0 ? 'active' : 'locked';
     } else {
       row.follow_up_ends_at = null;
       row.remaining_seconds = null;
@@ -199,9 +195,7 @@ exports.getCaseDetails = async (doctorId, appointmentId) => {
     
     row.follow_up_ends_at = endsAt.toISOString();
     row.remaining_seconds = remainingSeconds;
-    if (row.chat_status === 'active' && remainingSeconds === 0) {
-      row.chat_status = 'locked';
-    }
+    row.chat_status = remainingSeconds > 0 ? 'active' : 'locked';
   } else {
     row.follow_up_ends_at = null;
     row.remaining_seconds = null;
