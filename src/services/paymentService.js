@@ -101,7 +101,7 @@ exports.payAppointment = async (patientId, data) => {
   try {
     const detailsResult = await pool.query(
       `SELECT 
-         p.age, p.gender, 
+         p.name, p.age, p.gender, 
          an.skin_image_upload, an.analysis, an.skin_disease_classification, an.created_at
        FROM appointment a
        JOIN patient p ON a.patient_id = p.patient_id
@@ -129,6 +129,8 @@ exports.payAppointment = async (patientId, data) => {
         if (duplicateCheck.rows.length === 0) {
           const patientAge = details.age || "N/A";
           const patientGender = details.gender ? (details.gender.charAt(0).toUpperCase() + details.gender.slice(1)) : "N/A";
+          const patientName = details.name || "Patient";
+          const detailsStr = [patientGender, patientAge].filter(v => v !== "N/A").join(", ");
           const classification = details.skin_disease_classification || "N/A";
 
           // Parse confidence score
@@ -144,7 +146,7 @@ exports.payAppointment = async (patientId, data) => {
           // Build structured key-value text for the premium Clinical Summary Card
           const autoText = `📋 CLINICAL SUMMARY CARD\n` +
             `Appointment: ${appointment_id}\n` +
-            `Patient: ${patientGender}, ${patientAge}\n` +
+            `Patient: ${patientName}${detailsStr ? ` (${detailsStr})` : ""}\n` +
             `AI Prediction: ${classification}\n` +
             `Confidence: ${confidencePercent}\n` +
             `Analysis Date: ${new Date(details.created_at || Date.now()).toLocaleDateString("en-US", { year: 'numeric', month: 'short', day: 'numeric' })}\n` +
