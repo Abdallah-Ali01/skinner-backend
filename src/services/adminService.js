@@ -1,5 +1,7 @@
 const pool = require("../config/database");
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 
 exports.getPendingDoctors = async () => {
   const result = await pool.query(
@@ -94,7 +96,7 @@ exports.rejectDoctor = async (data) => {
   }
 
   const doctorCheck = await pool.query(
-    `SELECT approval_status FROM doctor WHERE medical_syndicate_id_card = $1`,
+    `SELECT approval_status, syndicate_card_image FROM doctor WHERE medical_syndicate_id_card = $1`,
     [medical_syndicate_id_card]
   );
 
@@ -110,18 +112,32 @@ exports.rejectDoctor = async (data) => {
     throw err;
   }
 
+  // Delete the doctor record entirely so they can register again
   await pool.query(
     `
-    UPDATE doctor
-    SET approval_status = 'rejected'
+    DELETE FROM doctor
     WHERE medical_syndicate_id_card = $1
     `,
     [medical_syndicate_id_card]
   );
 
+  // Clean up the uploaded syndicate card image file if it exists
+  const doctorImg = doctorCheck.rows[0].syndicate_card_image;
+  if (doctorImg) {
+    try {
+      const filename = path.basename(doctorImg);
+      const filePath = path.join(process.cwd(), "src", "uploads", "doctor-cards", filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (err) {
+      console.error("Failed to delete syndicate card image file on reject:", err);
+    }
+  }
+
   return {
     success: true,
-    message: "Doctor rejected"
+    message: "Doctor rejected and record deleted successfully"
   };
 };
 
