@@ -6,6 +6,24 @@ const emailService = require("./emailService");
 
 const TABLE_MAP = { patient: "patient", doctor: "doctor", admin: "admin" };
 
+/**
+ * Check if an email is already registered in ANY role table.
+ * Returns the role name ("patient", "doctor", "admin") if found, or null.
+ */
+async function isEmailTakenGlobally(email) {
+  const cleanEmail = String(email).trim().toLowerCase();
+  const result = await pool.query(
+    `SELECT 'patient' AS role FROM patient WHERE LOWER(email) = $1
+     UNION ALL
+     SELECT 'doctor' AS role FROM doctor WHERE LOWER(email) = $1
+     UNION ALL
+     SELECT 'admin' AS role FROM admin WHERE LOWER(email) = $1
+     LIMIT 1`,
+    [cleanEmail]
+  );
+  return result.rows.length > 0 ? result.rows[0].role : null;
+}
+
 function getBirthDateFromNationalId(nationalId = "") {
   const cleanId = String(nationalId).trim();
   if (!/^[23][0-9]{13}$/.test(cleanId)) return null;
@@ -74,13 +92,13 @@ exports.registerPatient = async (data) => {
     throw err;
   }
 
-  const existing = await pool.query(
-    `SELECT 1 FROM patient WHERE LOWER(email) = $1`,
-    [cleanEmail]
-  );
-
-  if (existing.rows.length > 0) {
-    const err = new Error("Email already exists");
+  const existingRole = await isEmailTakenGlobally(cleanEmail);
+  if (existingRole) {
+    const err = new Error(
+      existingRole === "patient"
+        ? "Email already exists"
+        : `This email is already registered as a ${existingRole}. Each email can only be used for one account type.`
+    );
     err.status = 409;
     throw err;
   }
@@ -215,13 +233,13 @@ exports.registerDoctor = async (data, file) => {
     throw err;
   }
 
-  const existing = await pool.query(
-    `SELECT 1 FROM doctor WHERE LOWER(email) = $1`,
-    [cleanEmail]
-  );
-
-  if (existing.rows.length > 0) {
-    const err = new Error("Doctor already exists with this email");
+  const existingRole = await isEmailTakenGlobally(cleanEmail);
+  if (existingRole) {
+    const err = new Error(
+      existingRole === "doctor"
+        ? "Doctor already exists with this email"
+        : `This email is already registered as a ${existingRole}. Each email can only be used for one account type.`
+    );
     err.status = 409;
     throw err;
   }
@@ -315,13 +333,13 @@ exports.registerAdmin = async (data) => {
     throw err;
   }
 
-  const existing = await pool.query(
-    `SELECT 1 FROM admin WHERE LOWER(email) = $1`,
-    [cleanEmail]
-  );
-
-  if (existing.rows.length > 0) {
-    const err = new Error("Admin already exists");
+  const existingRole = await isEmailTakenGlobally(cleanEmail);
+  if (existingRole) {
+    const err = new Error(
+      existingRole === "admin"
+        ? "Admin already exists"
+        : `This email is already registered as a ${existingRole}. Each email can only be used for one account type.`
+    );
     err.status = 409;
     throw err;
   }
