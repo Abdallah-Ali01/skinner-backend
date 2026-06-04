@@ -18,6 +18,11 @@ module.exports = (io) => {
     // Join personal room for real-time notification updates outside the active chat
     socket.join(socket.user.id);
 
+    // Join admins room for administrative real-time updates
+    if (socket.user.role === "admin") {
+      socket.join("admins");
+    }
+
     socket.on("join_chat", async ({ chat_id }) => {
       try {
         const access = await chatService.checkAccess(chat_id, socket.user.id, socket.user.role);

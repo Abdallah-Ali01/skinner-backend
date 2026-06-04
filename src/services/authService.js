@@ -304,15 +304,17 @@ exports.registerDoctor = async (data, file) => {
     ]
   );
 
+  const newDoctorQuery = await pool.query(
+    `SELECT medical_syndicate_id_card, name, phone, gender, email, national_id, specialization, year_of_experience, clinic_address, approval_status, syndicate_card_image, consultation_fee, age, created_at
+     FROM doctor
+     WHERE medical_syndicate_id_card = $1`,
+    [doctorId]
+  );
+
   return {
     success: true,
     message: "Doctor registered successfully",
-    data: {
-      medical_syndicate_id_card: doctorId,
-      email: cleanEmail,
-      approval_status: "pending",
-      syndicate_card_image: syndicateCardImage
-    }
+    data: newDoctorQuery.rows[0]
   };
 };
 

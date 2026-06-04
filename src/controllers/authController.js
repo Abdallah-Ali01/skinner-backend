@@ -15,6 +15,17 @@ exports.registerPatient = async (req, res) => {
 exports.registerDoctor = async (req, res) => {
   try {
     const result = await authService.registerDoctor(req.body, req.file);
+
+    // Emit socket event to admins room in real-time
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        io.to("admins").emit("new_pending_doctor", result.data);
+      }
+    } catch (socketErr) {
+      console.error("Failed to broadcast new_pending_doctor socket event:", socketErr);
+    }
+
     res.status(201).json(result);
   } catch (error) {
     res.status(error.status || 500).json({
