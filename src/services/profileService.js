@@ -1,5 +1,36 @@
 const pool = require("../config/database");
 
+/**
+ * Check if a phone number is already registered in ANY role table (patient, doctor).
+ * Returns the role name ("patient", "doctor") if found, or null.
+ * Handles normalization and alternative representations (e.g. prefix 0 vs +20).
+ */
+async function isPhoneTakenGlobally(phone, excludeId = null, excludeRole = null) {
+  if (!phone) return null;
+  const cleanPhone = String(phone).trim();
+  let phoneAlternative = cleanPhone;
+  if (cleanPhone.startsWith("+20")) {
+    phoneAlternative = "0" + cleanPhone.slice(3);
+  } else if (cleanPhone.startsWith("0")) {
+    phoneAlternative = "+20" + cleanPhone.slice(1);
+  }
+
+  const result = await pool.query(
+    `SELECT 'patient' AS role, patient_id AS id FROM patient WHERE phone IN ($1, $2)
+     UNION ALL
+     SELECT 'doctor' AS role, medical_syndicate_id_card AS id FROM doctor WHERE phone IN ($1, $2)`,
+    [cleanPhone, phoneAlternative]
+  );
+
+  for (const row of result.rows) {
+    if (excludeId && excludeRole && row.role === excludeRole && String(row.id) === String(excludeId)) {
+      continue;
+    }
+    return row.role;
+  }
+  return null;
+}
+
 function getBirthDateFromNationalId(nationalId = "") {
   const cleanId = String(nationalId).trim();
   if (!/^[23][0-9]{13}$/.test(cleanId)) return null;
@@ -40,10 +71,24 @@ function calculateAge(birthDate) {
  */
 exports.updatePatientProfile = async (patientId, data) => {
   if (data.phone !== undefined) {
-    if (data.phone && !/^(\+20|0)(10|11|12|15)[0-9]{8}$/.test(String(data.phone).trim())) {
-      const err = new Error("Invalid Egyptian mobile number. Must be a valid 010, 011, 012, or 015 number (11 digits or starting with +20).");
-      err.status = 400;
-      throw err;
+    if (data.phone) {
+      const cleanPhone = String(data.phone).trim();
+      if (!/^(\+20|0)(10|11|12|15)[0-9]{8}$/.test(cleanPhone)) {
+        const err = new Error("Invalid Egyptian mobile number. Must be a valid 010, 011, 012, or 015 number (11 digits or starting with +20).");
+        err.status = 400;
+        throw err;
+      }
+
+      const phoneTakenRole = await isPhoneTakenGlobally(cleanPhone, patientId, "patient");
+      if (phoneTakenRole) {
+        const err = new Error(
+          phoneTakenRole === "patient"
+            ? "Phone number is already registered"
+            : `This phone number is already registered as a ${phoneTakenRole}. Each phone number can only be used for one account type.`
+        );
+        err.status = 409;
+        throw err;
+      }
     }
   }
 
@@ -112,10 +157,24 @@ exports.updatePatientProfile = async (patientId, data) => {
  */
 exports.updateDoctorProfile = async (doctorId, data) => {
   if (data.phone !== undefined) {
-    if (data.phone && !/^(\+20|0)(10|11|12|15)[0-9]{8}$/.test(String(data.phone).trim())) {
-      const err = new Error("Invalid Egyptian mobile number. Must be a valid 010, 011, 012, or 015 number (11 digits or starting with +20).");
-      err.status = 400;
-      throw err;
+    if (data.phone) {
+      const cleanPhone = String(data.phone).trim();
+      if (!/^(\+20|0)(10|11|12|15)[0-9]{8}$/.test(cleanPhone)) {
+        const err = new Error("Invalid Egyptian mobile number. Must be a valid 010, 011, 012, or 015 number (11 digits or starting with +20).");
+        err.status = 400;
+        throw err;
+      }
+
+      const phoneTakenRole = await isPhoneTakenGlobally(cleanPhone, doctorId, "doctor");
+      if (phoneTakenRole) {
+        const err = new Error(
+          phoneTakenRole === "doctor"
+            ? "Phone number is already registered"
+            : `This phone number is already registered as a ${phoneTakenRole}. Each phone number can only be used for one account type.`
+        );
+        err.status = 409;
+        throw err;
+      }
     }
   }
 
