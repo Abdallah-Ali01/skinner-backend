@@ -3,7 +3,7 @@ const pool = require("./src/config/database");
 const { v4: uuidv4 } = require("uuid");
 
 async function assignCase() {
-  const patientEmail = "samsimo@gmail.com";
+  const patientEmail = "samasimo@gmail.com";
   const doctorEmail = "negm@gmail.com";
 
   console.log(`Assigning finished case for Patient: ${patientEmail} to Doctor: ${doctorEmail}...`);
