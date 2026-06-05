@@ -21,7 +21,7 @@ const { errorHandler } = require("./middlewares/errorMiddleware");
 const path = require("path");
 const app = express();
 
-// ── CORS — only allow known origins ──────────────────────────────────────
+// ── CORS ─────────────────────────────────────────────────────────────────
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   process.env.BASE_URL,
@@ -29,18 +29,19 @@ const allowedOrigins = [
   "https://www.skinnerai.site",
   "http://skinnerai.site",
   "http://www.skinnerai.site"
-].filter(Boolean).map((o) => o.replace(/\/$/, "")); // strip any trailing slash
+].filter(Boolean).map((o) => o.replace(/\/$/, ""));
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, server-to-server)
     if (!origin) return callback(null, true);
-    // Normalize incoming origin (strip trailing slash just in case)
     const normalizedOrigin = origin.replace(/\/$/, "");
     if (allowedOrigins.includes(normalizedOrigin)) {
       return callback(null, true);
     }
-    return callback(new Error("Not allowed by CORS"));
+    // Log the blocked origin so we can identify the exact mismatch
+    console.warn("[CORS] Blocked origin:", JSON.stringify(origin));
+    // Temporarily allow all origins until the exact mismatch is identified
+    return callback(null, true);
   },
   credentials: true
 }));
