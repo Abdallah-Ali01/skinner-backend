@@ -1,5 +1,4 @@
 const express = require("express");
-const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
@@ -25,10 +24,10 @@ const app = express();
 // Nginx sets Access-Control-Allow-Origin headers. Express cors() is kept
 // only for local development (no Nginx). In production the header would be
 // duplicated if both set it, so we pass through without adding headers here.
-app.use(cors({
+/*app.use(cors({
   origin: true,   // reflect the request origin — works for both dev and prod
   credentials: true
-}));
+}));*/
 
 
 
