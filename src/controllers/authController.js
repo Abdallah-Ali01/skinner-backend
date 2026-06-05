@@ -38,6 +38,21 @@ exports.registerDoctor = async (req, res) => {
 exports.registerAdmin = async (req, res) => {
   try {
     const result = await authService.registerAdmin(req.body);
+
+    // Emit socket event to admins room in real-time indicating invite code used
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        io.to("admins").emit("invite_code_used", {
+          invite_code: req.body.invite_code,
+          email: result.data.email,
+          used_at: new Date().toISOString()
+        });
+      }
+    } catch (socketErr) {
+      console.error("Failed to broadcast invite_code_used socket event:", socketErr);
+    }
+
     res.status(201).json(result);
   } catch (error) {
     res.status(error.status || 500).json({
