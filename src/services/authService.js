@@ -40,9 +40,9 @@ async function isPhoneTakenGlobally(phone, excludeId = null, excludeRole = null)
   }
 
   const result = await pool.query(
-    `SELECT 'patient' AS role, patient_id AS id FROM patient WHERE phone IN ($1, $2)
+    `SELECT 'patient' AS role, patient_id::TEXT AS id FROM patient WHERE phone IN ($1, $2)
      UNION ALL
-     SELECT 'doctor' AS role, medical_syndicate_id_card AS id FROM doctor WHERE phone IN ($1, $2)`,
+     SELECT 'doctor' AS role, medical_syndicate_id_card::TEXT AS id FROM doctor WHERE phone IN ($1, $2)`,
     [cleanPhone, phoneAlternative]
   );
 
