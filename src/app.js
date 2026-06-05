@@ -30,8 +30,7 @@ app.use(cors({
   credentials: true
 }));
 
-// Explicitly handle OPTIONS preflight for all routes
-app.options("*", cors());
+
 
 app.use(helmet({
   contentSecurityPolicy: false,
