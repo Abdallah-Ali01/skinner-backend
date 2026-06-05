@@ -16,7 +16,9 @@ exports.listDoctors = async (query) => {
       d.year_of_experience,
       d.clinic_address,
       d.consultation_fee,
-      d.gender
+      d.gender,
+      d.email,
+      d.phone
     FROM doctor d
     WHERE d.approval_status = 'approved'
   `;
