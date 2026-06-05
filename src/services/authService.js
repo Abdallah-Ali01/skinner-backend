@@ -688,7 +688,7 @@ async function detectRoleByEmail(email) {
 }
 
 exports.forgotPassword = async (data) => {
-  const { email } = data;
+  const { email, force } = data;
 
   if (!email) {
     const err = new Error("email is required");
@@ -710,6 +710,23 @@ exports.forgotPassword = async (data) => {
     const err = new Error("No account found with this email");
     err.status = 404;
     throw err;
+  }
+
+  if (!force) {
+    const existingCodeResult = await pool.query(
+      `SELECT expires_at FROM password_reset WHERE LOWER(email) = $1 AND role = $2 AND expires_at > NOW() LIMIT 1`,
+      [cleanEmail, role]
+    );
+
+    if (existingCodeResult.rows.length > 0) {
+      const existingExpiresAt = existingCodeResult.rows[0].expires_at;
+      return {
+        success: true,
+        message: "Password reset code is already active.",
+        alreadySent: true,
+        expiresAt: existingExpiresAt
+      };
+    }
   }
 
   const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -735,7 +752,9 @@ exports.forgotPassword = async (data) => {
 
   return {
     success: true,
-    message: "Password reset code sent successfully"
+    message: "Password reset code sent successfully",
+    alreadySent: false,
+    expiresAt: expiresAt
   };
 };
 
