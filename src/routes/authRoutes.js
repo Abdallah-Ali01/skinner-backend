@@ -288,6 +288,24 @@ router.post("/register-admin", authController.registerAdmin);
  */
 router.post("/login", authController.login);
 
+/**
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     summary: Logout user
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Logout successful
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.post("/logout", verifyToken, authController.logout);
+
 
 
 
