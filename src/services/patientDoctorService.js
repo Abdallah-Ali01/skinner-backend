@@ -21,6 +21,18 @@ exports.listDoctors = async (query) => {
       d.phone
     FROM doctor d
     WHERE d.approval_status = 'approved'
+      AND EXISTS (
+        SELECT 1 FROM doctor_date_availability dda
+        WHERE dda.medical_syndicate_id_card = d.medical_syndicate_id_card
+          AND (dda.available_date + dda.start_time) > (NOW() AT TIME ZONE 'UTC')
+          AND NOT EXISTS (
+            SELECT 1 FROM appointment a
+            WHERE a.medical_syndicate_id_card = dda.medical_syndicate_id_card
+              AND (a.date AT TIME ZONE 'UTC')::date = dda.available_date
+              AND (a.date AT TIME ZONE 'UTC')::time = dda.start_time
+              AND a.status != 'cancelled'
+          )
+      )
   `;
 
   const values = [];
