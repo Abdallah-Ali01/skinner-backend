@@ -97,6 +97,24 @@ function calculateAge(birthDate) {
  * Update patient profile (only allowed fields).
  */
 exports.updatePatientProfile = async (patientId, data) => {
+  if (data.name !== undefined) {
+    const cleanName = String(data.name).trim();
+    if (cleanName.length < 2 || cleanName.length > 80) {
+      const err = new Error("Name must be between 2 and 80 characters long.");
+      err.status = 400;
+      throw err;
+    }
+  }
+
+  if (data.address !== undefined) {
+    const cleanAddress = String(data.address).trim();
+    if (cleanAddress.length < 3 || cleanAddress.length > 160) {
+      const err = new Error("Address must be between 3 and 160 characters long.");
+      err.status = 400;
+      throw err;
+    }
+  }
+
   if (data.email !== undefined) {
     const cleanEmail = String(data.email).trim().toLowerCase();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -208,6 +226,24 @@ exports.updatePatientProfile = async (patientId, data) => {
  * Update doctor profile (only allowed fields).
  */
 exports.updateDoctorProfile = async (doctorId, data) => {
+  if (data.name !== undefined) {
+    const cleanName = String(data.name).trim();
+    if (cleanName.length < 2 || cleanName.length > 80) {
+      const err = new Error("Name must be between 2 and 80 characters long.");
+      err.status = 400;
+      throw err;
+    }
+  }
+
+  if (data.clinic_address !== undefined) {
+    const cleanAddress = String(data.clinic_address).trim();
+    if (cleanAddress.length < 3 || cleanAddress.length > 160) {
+      const err = new Error("Clinic address must be between 3 and 160 characters long.");
+      err.status = 400;
+      throw err;
+    }
+  }
+
   if (data.email !== undefined) {
     const cleanEmail = String(data.email).trim().toLowerCase();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
