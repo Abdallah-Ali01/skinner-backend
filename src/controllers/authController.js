@@ -3,6 +3,17 @@ const authService = require("../services/authService");
 exports.registerPatient = async (req, res) => {
   try {
     const result = await authService.registerPatient(req.body);
+
+    // Emit socket event to admins room in real-time
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        io.to("admins").emit("patient_registered", result.data);
+      }
+    } catch (socketErr) {
+      console.error("Failed to broadcast patient_registered socket event:", socketErr);
+    }
+
     res.status(201).json(result);
   } catch (error) {
     res.status(error.status || 500).json({
@@ -48,9 +59,10 @@ exports.registerAdmin = async (req, res) => {
           email: result.data.email,
           used_at: new Date().toISOString()
         });
+        io.to("admins").emit("admin_registered", result.data);
       }
     } catch (socketErr) {
-      console.error("Failed to broadcast invite_code_used socket event:", socketErr);
+      console.error("Failed to broadcast invite_code_used/admin_registered socket event:", socketErr);
     }
 
     res.status(201).json(result);

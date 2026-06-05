@@ -15,6 +15,20 @@ exports.getPendingDoctors = async (req, res) => {
 exports.approveDoctor = async (req, res) => {
   try {
     const result = await adminService.approveDoctor(req.user.id, req.body);
+
+    // Emit socket event to admins room in real-time
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        io.to("admins").emit("doctor_status_changed", {
+          medical_syndicate_id_card: req.body.medical_syndicate_id_card,
+          status: "approved"
+        });
+      }
+    } catch (socketErr) {
+      console.error("Failed to broadcast doctor_status_changed (approved) socket event:", socketErr);
+    }
+
     res.status(200).json(result);
   } catch (error) {
     res.status(error.status || 500).json({
@@ -27,6 +41,20 @@ exports.approveDoctor = async (req, res) => {
 exports.rejectDoctor = async (req, res) => {
   try {
     const result = await adminService.rejectDoctor(req.body);
+
+    // Emit socket event to admins room in real-time
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        io.to("admins").emit("doctor_status_changed", {
+          medical_syndicate_id_card: req.body.medical_syndicate_id_card,
+          status: "rejected"
+        });
+      }
+    } catch (socketErr) {
+      console.error("Failed to broadcast doctor_status_changed (rejected) socket event:", socketErr);
+    }
+
     res.status(200).json(result);
   } catch (error) {
     res.status(error.status || 500).json({
