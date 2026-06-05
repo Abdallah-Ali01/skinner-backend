@@ -26,14 +26,18 @@ const allowedOrigins = [
   process.env.FRONTEND_URL,
   process.env.BASE_URL,
   "https://skinnerai.site",
-  "https://www.skinnerai.site"
-].filter(Boolean);
+  "https://www.skinnerai.site",
+  "http://skinnerai.site",
+  "http://www.skinnerai.site"
+].filter(Boolean).map((o) => o.replace(/\/$/, "")); // strip any trailing slash
 
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, curl, server-to-server)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
+    // Normalize incoming origin (strip trailing slash just in case)
+    const normalizedOrigin = origin.replace(/\/$/, "");
+    if (allowedOrigins.includes(normalizedOrigin)) {
       return callback(null, true);
     }
     return callback(new Error("Not allowed by CORS"));
