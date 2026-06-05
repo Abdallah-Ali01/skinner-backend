@@ -244,6 +244,18 @@ exports.registerDoctor = async (data, file) => {
     throw err;
   }
 
+  // Check if a doctor with this National ID is already registered
+  const existingNationalId = await pool.query(
+    "SELECT 1 FROM doctor WHERE national_id = $1",
+    [cleanNationalId]
+  );
+  if (existingNationalId.rows.length > 0) {
+    const err = new Error("A doctor with this National ID is already registered in the system.");
+    err.status = 409;
+    throw err;
+  }
+
+
   // Generate highly unique timestamp-based doctor identifier (with a random suffix to completely prevent collisions)
   let doctorId = "";
   let isUnique = false;
