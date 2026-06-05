@@ -31,6 +31,33 @@ async function isPhoneTakenGlobally(phone, excludeId = null, excludeRole = null)
   return null;
 }
 
+/**
+ * Check if an email is already registered in ANY role table (patient, doctor, admin).
+ * Returns the role name ("patient", "doctor", "admin") if found, or null.
+ * Excludes the given ID and Role from checks.
+ */
+async function isEmailTakenGlobally(email, excludeId = null, excludeRole = null) {
+  if (!email) return null;
+  const cleanEmail = String(email).trim().toLowerCase();
+
+  const result = await pool.query(
+    `SELECT 'patient' AS role, patient_id::TEXT AS id FROM patient WHERE LOWER(email) = $1
+     UNION ALL
+     SELECT 'doctor' AS role, medical_syndicate_id_card::TEXT AS id FROM doctor WHERE LOWER(email) = $1
+     UNION ALL
+     SELECT 'admin' AS role, admin_id::TEXT AS id FROM admin WHERE LOWER(email) = $1`,
+    [cleanEmail]
+  );
+
+  for (const row of result.rows) {
+    if (excludeId && excludeRole && row.role === excludeRole && String(row.id) === String(excludeId)) {
+      continue;
+    }
+    return row.role;
+  }
+  return null;
+}
+
 function getBirthDateFromNationalId(nationalId = "") {
   const cleanId = String(nationalId).trim();
   if (!/^[23][0-9]{13}$/.test(cleanId)) return null;
@@ -70,6 +97,27 @@ function calculateAge(birthDate) {
  * Update patient profile (only allowed fields).
  */
 exports.updatePatientProfile = async (patientId, data) => {
+  if (data.email !== undefined) {
+    const cleanEmail = String(data.email).trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!emailRegex.test(cleanEmail)) {
+      const err = new Error("Invalid email format");
+      err.status = 400;
+      throw err;
+    }
+
+    const emailTakenRole = await isEmailTakenGlobally(cleanEmail, patientId, "patient");
+    if (emailTakenRole) {
+      const err = new Error(
+        emailTakenRole === "patient"
+          ? "Email already exists"
+          : `This email is already registered as a ${emailTakenRole}. Each email can only be used for one account type.`
+      );
+      err.status = 409;
+      throw err;
+    }
+  }
+
   if (data.phone !== undefined) {
     if (data.phone) {
       const cleanPhone = String(data.phone).trim();
@@ -101,7 +149,7 @@ exports.updatePatientProfile = async (patientId, data) => {
     }
   }
 
-  const allowedFields = ["name", "phone", "gender", "age", "address", "patient_history"];
+  const allowedFields = ["name", "email", "phone", "gender", "age", "address", "patient_history"];
   const updates = [];
   const values = [];
   let paramIndex = 1;
@@ -109,7 +157,11 @@ exports.updatePatientProfile = async (patientId, data) => {
   for (const field of allowedFields) {
     if (data[field] !== undefined) {
       updates.push(`${field} = $${paramIndex}`);
-      values.push(data[field]);
+      if (field === "email") {
+        values.push(String(data[field]).trim().toLowerCase());
+      } else {
+        values.push(data[field]);
+      }
       paramIndex++;
     }
   }
@@ -156,6 +208,27 @@ exports.updatePatientProfile = async (patientId, data) => {
  * Update doctor profile (only allowed fields).
  */
 exports.updateDoctorProfile = async (doctorId, data) => {
+  if (data.email !== undefined) {
+    const cleanEmail = String(data.email).trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!emailRegex.test(cleanEmail)) {
+      const err = new Error("Invalid email format");
+      err.status = 400;
+      throw err;
+    }
+
+    const emailTakenRole = await isEmailTakenGlobally(cleanEmail, doctorId, "doctor");
+    if (emailTakenRole) {
+      const err = new Error(
+        emailTakenRole === "doctor"
+          ? "Doctor already exists with this email"
+          : `This email is already registered as a ${emailTakenRole}. Each email can only be used for one account type.`
+      );
+      err.status = 409;
+      throw err;
+    }
+  }
+
   if (data.phone !== undefined) {
     if (data.phone) {
       const cleanPhone = String(data.phone).trim();
@@ -260,7 +333,7 @@ exports.updateDoctorProfile = async (doctorId, data) => {
   }
 
   const allowedFields = [
-    "name", "phone", "gender", "clinic_address",
+    "name", "email", "phone", "gender", "clinic_address",
     "year_of_experience", "specialization", "consultation_fee", "age"
   ];
   const updates = [];
@@ -270,7 +343,11 @@ exports.updateDoctorProfile = async (doctorId, data) => {
   for (const field of allowedFields) {
     if (data[field] !== undefined) {
       updates.push(`${field} = $${paramIndex}`);
-      values.push(data[field]);
+      if (field === "email") {
+        values.push(String(data[field]).trim().toLowerCase());
+      } else {
+        values.push(data[field]);
+      }
       paramIndex++;
     }
   }
