@@ -1,10 +1,14 @@
 const { io } = require("socket.io-client");
 
-//  هنا التوكن بتاع patient أو doctor
-const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjM0N2YzOGMxLTY4ZTUtNDdkYS1hZTkxLTJlMTk5MGRiNzRhOCIsImVtYWlsIjoicGF0aWVudDFAdGVzdC5jb20iLCJyb2xlIjoicGF0aWVudCIsImlhdCI6MTc3MzE2MDkwNiwiZXhwIjoxNzczNzY1NzA2fQ.nMwc9AOE6DN70hPpCzEV3zcpxqp2g5poEB0irW-vXUQ";
+//  Load token from environment — never hardcode tokens
+const TOKEN = process.env.TEST_SOCKET_TOKEN || "";
+if (!TOKEN) {
+  console.error("TEST_SOCKET_TOKEN is not set in environment. Exiting.");
+  process.exit(1);
+}
 
 //  هنا chat_id صالح ومدفوع
-const CHAT_ID = "5b781ee4-1c8e-4ed7-8a31-c40ca4f98357";
+const CHAT_ID = process.env.TEST_CHAT_ID || "";
 
 const socket = io("http://localhost:5000", {
   auth: {
