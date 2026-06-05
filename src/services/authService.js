@@ -748,6 +748,12 @@ exports.resetPassword = async (data) => {
     throw err;
   }
 
+  if (String(new_password).length < 6) {
+    const err = new Error("Password must be at least 6 characters long.");
+    err.status = 400;
+    throw err;
+  }
+
   const cleanEmail = String(email).trim().toLowerCase();
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   if (!emailRegex.test(cleanEmail)) {
