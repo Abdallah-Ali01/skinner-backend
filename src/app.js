@@ -1,4 +1,5 @@
 const express = require("express");
+const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
@@ -20,14 +21,25 @@ const { errorHandler } = require("./middlewares/errorMiddleware");
 const path = require("path");
 const app = express();
 
-// ── CORS — handled by Nginx reverse proxy ────────────────────────────────
-// Nginx sets Access-Control-Allow-Origin headers. Express cors() is kept
-// only for local development (no Nginx). In production the header would be
-// duplicated if both set it, so we pass through without adding headers here.
-/*app.use(cors({
-  origin: true,   // reflect the request origin — works for both dev and prod
+// ── CORS — Express handles this, Nginx must NOT add CORS headers ──────────
+const allowedOrigins = [
+  "https://skinnerai.site",
+  "https://www.skinnerai.site",
+  process.env.FRONTEND_URL,
+  process.env.BASE_URL,
+].filter(Boolean).map((o) => o.replace(/\/$/, ""));
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin.replace(/\/$/, ""))) {
+      return callback(null, true);
+    }
+    return callback(null, true); // allow all — Nginx whitelist is the gate
+  },
   credentials: true
-}));*/
+}));
+app.options("*", cors());
 
 
 
