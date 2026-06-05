@@ -123,7 +123,7 @@ exports.updateDoctorProfile = async (doctorId, data) => {
   let currentExp = null;
   let currentNationalId = null;
 
-  if (data.age !== undefined || data.year_of_experience !== undefined) {
+  if (data.age !== undefined || data.year_of_experience !== undefined || data.gender !== undefined) {
     const docRes = await pool.query(
       "SELECT age, year_of_experience, national_id FROM doctor WHERE medical_syndicate_id_card = $1",
       [doctorId]
@@ -134,6 +134,22 @@ exports.updateDoctorProfile = async (doctorId, data) => {
       currentNationalId = docRes.rows[0].national_id;
     }
   }
+
+  if (data.gender !== undefined) {
+    const cleanGender = String(data.gender).trim().toLowerCase();
+    if (cleanGender === "male" || cleanGender === "female") {
+      if (currentNationalId) {
+        const genderDigit = Number(String(currentNationalId).trim()[12]);
+        const derivedGender = (genderDigit % 2 === 0) ? "female" : "male";
+        if (cleanGender !== derivedGender) {
+          const err = new Error(`Entered gender (${data.gender}) does not match the gender derived from National ID (${derivedGender}).`);
+          err.status = 400;
+          throw err;
+        }
+      }
+    }
+  }
+
 
   if (data.age !== undefined) {
     const numericAge = Number(data.age);

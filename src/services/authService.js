@@ -76,6 +76,21 @@ exports.registerPatient = async (data) => {
     throw err;
   }
 
+  // Name length validation (matching frontend)
+  const cleanName = String(name).trim();
+  if (cleanName.length < 2 || cleanName.length > 80) {
+    const err = new Error("Name must be between 2 and 80 characters long.");
+    err.status = 400;
+    throw err;
+  }
+
+  // Password length validation (matching frontend)
+  if (String(password).length < 6) {
+    const err = new Error("Password must be at least 6 characters long.");
+    err.status = 400;
+    throw err;
+  }
+
   if (phone) {
     const cleanPhone = String(phone).trim();
     if (!/^(\+20|0)(10|11|12|15)[0-9]{8}$/.test(cleanPhone)) {
@@ -164,6 +179,21 @@ exports.registerDoctor = async (data, file) => {
     throw err;
   }
 
+  // Name length validation (matching frontend)
+  const cleanName = String(name).trim();
+  if (cleanName.length < 2 || cleanName.length > 80) {
+    const err = new Error("Name must be between 2 and 80 characters long.");
+    err.status = 400;
+    throw err;
+  }
+
+  // Password length validation (matching frontend)
+  if (String(password).length < 6) {
+    const err = new Error("Password must be at least 6 characters long.");
+    err.status = 400;
+    throw err;
+  }
+
   // 2. Phone number validation (Egyptian mobile formats)
   if (!phone || !/^(\+20|0)(10|11|12|15)[0-9]{8}$/.test(String(phone).trim())) {
     const err = new Error("Invalid Egyptian mobile number. Must be a valid 010, 011, 012, or 015 number (11 digits or starting with +20).");
@@ -202,6 +232,20 @@ exports.registerDoctor = async (data, file) => {
     const err = new Error(`Entered age (${numericAge}) does not match the age calculated from National ID (${calculatedAge}).`);
     err.status = 400;
     throw err;
+  }
+
+  // Consistency check: Entered gender must match National ID gender if specified as male/female
+  if (gender) {
+    const cleanGender = String(gender).trim().toLowerCase();
+    if (cleanGender === "male" || cleanGender === "female") {
+      const genderDigit = Number(cleanNationalId[12]);
+      const derivedGender = (genderDigit % 2 === 0) ? "female" : "male";
+      if (cleanGender !== derivedGender) {
+        const err = new Error(`Entered gender (${gender}) does not match the gender derived from National ID (${derivedGender}).`);
+        err.status = 400;
+        throw err;
+      }
+    }
   }
 
   // 5. Experience Years Validation (0 to 45 years)
