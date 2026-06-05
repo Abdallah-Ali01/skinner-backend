@@ -35,11 +35,10 @@ app.use(cors({
     if (allowedOrigins.includes(origin.replace(/\/$/, ""))) {
       return callback(null, true);
     }
-    return callback(null, true); // allow all — Nginx whitelist is the gate
+    return callback(null, true);
   },
   credentials: true
 }));
-app.options("/(.*)", cors());
 
 
 
