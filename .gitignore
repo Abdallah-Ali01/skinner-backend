@@ -11,3 +11,7 @@ chat-bot/src/__pycache__
 dist
 build
 DEPLOYMENT.md
+
+# Diagrams
+*.puml
+*.mermaid
